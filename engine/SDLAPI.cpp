@@ -1,26 +1,25 @@
 #include "SDLAPI.h"
 
+#include <SDL2/SDL.h>
 #include <SDL2/SDL_syswm.h>
 
 #include <iostream>
 
-SDL_Window* SDLAPI::window = nullptr;
-
-bool SDLAPI::init(SDL_WindowFlags windowFlags)
+void SDLAPI::init(int windowFlags)
 {
     // Create an SDL window that supports Vulkan rendering.
-    if (SDL_Init(SDL_INIT_VIDEO) != 0) {
-        std::cout << "Could not initialize SDL." << std::endl;
-        return false;
+    if (SDL_Init(SDL_INIT_VIDEO) != 0)
+    {
+        throw std::exception("Could not initialize SDL.");
     }
+
+    initialized = true;
 
     window = SDL_CreateWindow("Vulkan Window", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 720, windowFlags);
-    if (window == NULL) {
-        std::cout << "Could not create SDL window." << std::endl;
-        return false;
+    if (window == NULL)
+    {
+        throw std::exception("Could not create SDL window.");
     }
-
-    return true;
 }
 
 void SDLAPI::processInput(bool& stillRunning)
@@ -48,6 +47,15 @@ void SDLAPI::processFrameEnd()
 
 void SDLAPI::release()
 {
-    SDL_DestroyWindow(window);
-    SDL_Quit();
+    if (window != NULL)
+    {
+        SDL_DestroyWindow(window);
+        window = NULL;
+    }
+
+    if (initialized)
+    {
+        SDL_Quit();
+        initialized = false;
+    }
 }

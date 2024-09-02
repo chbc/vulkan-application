@@ -1,17 +1,17 @@
 #pragma once
 
-#include <SDL2/SDL.h>
-
 class SDLAPI
 {
 private:
-	static SDL_Window* window;
+	struct SDL_Window* window;
+	bool initialized = false;
 
 private:
-	static bool init(SDL_WindowFlags windowFlags);
-	static void processInput(bool& stillRunning);
-	static void processFrameEnd();
-	static void release();
+	void init(int windowFlags);
+	void processInput(bool& stillRunning);
+	void processFrameEnd();
+
+	void release();
 
 friend class Platform;
 friend class VulkanAPI;

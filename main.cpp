@@ -36,21 +36,27 @@ Create and destroy a Vulkan surface on an SDL window.
 
 #include "engine/Platform.h"
 
+#include <iostream>
+
 int main()
 {
-    if (!Platform::init())
+    Platform platform;
+    try
     {
+        platform.init();
+    }
+    catch (const std::exception& e)
+    {
+        std::cout << e.what() << std::endl;
         return 1;
     }
 
     bool stillRunning = true;
     while(stillRunning) 
     {
-        Platform::processInput(stillRunning);
-        Platform::processFrameEnd();
+        platform.processInput(stillRunning);
+        platform.processFrameEnd();
     }
-
-    Platform::release();
 
     return 0;
 }

@@ -1,58 +1,44 @@
 #include "VulkanAPI.h"
 
-#include "SDLAPI.h"
 #include <SDL2/SDL_vulkan.h>
 #include <vulkan/vulkan.hpp>
 
 #include <iostream>
 #include <vector>
 
-vk::SurfaceKHR surface;
-vk::Instance instance;
+vk::SurfaceKHR surface = nullptr;
+vk::Instance instance = nullptr;
 
 unsigned extension_count;
 std::vector<const char*> extensions;
 
-bool VulkanAPI::init()
+void VulkanAPI::init(const SDLAPI& sdlApi)
 {
-    if (!SDLAPI::init(SDL_WINDOW_VULKAN))
-    {
-        return false;
-    }
-
     // Get WSI extensions from SDL (we can add more if we like - we just can't remove these)
-    if (!SDL_Vulkan_GetInstanceExtensions(SDLAPI::window, &extension_count, NULL))
+    if (!SDL_Vulkan_GetInstanceExtensions(sdlApi.window, &extension_count, NULL))
     {
-        std::cout << "Could not get the number of required instance extensions from SDL." << std::endl;
-        return false;
+        throw std::exception("Could not get the number of required instance extensions from SDL.");
     }
     
     extensions.resize(extension_count);
-    if (!SDL_Vulkan_GetInstanceExtensions(SDLAPI::window, &extension_count, extensions.data()))
+    if (SDL_Vulkan_GetInstanceExtensions(sdlApi.window, &extension_count, extensions.data()))
     {
-        std::cout << "Could not get the names of required instance extensions from SDL." << std::endl;
-        return false;
+        throw std::exception("Could not get the names of required instance extensions from SDL.");
     }
 
-    if (!createInstance())
-    {
-        return false;
-    }
+    createInstance();
 
     // Create a Vulkan surface for rendering
     VkSurfaceKHR c_surface;
-    if (!SDL_Vulkan_CreateSurface(SDLAPI::window, static_cast<VkInstance>(instance), &c_surface))
+    if (!SDL_Vulkan_CreateSurface(sdlApi.window, static_cast<VkInstance>(instance), &c_surface))
     {
-        std::cout << "Could not create a Vulkan surface." << std::endl;
-        return false;
+        throw std::exception("Could not create a Vulkan surface.");
     }
 
     surface = c_surface;
-
-    return true;
 }
 
-bool VulkanAPI::createInstance()
+void VulkanAPI::createInstance()
 {
     // Use validation layers if this is a debug build
     std::vector<const char*> layers;
@@ -84,17 +70,30 @@ bool VulkanAPI::createInstance()
     {
         instance = vk::createInstance(createInfo);
     }
-    catch (const std::exception& e) {
-        std::cout << "Could not create a Vulkan instance: " << e.what() << std::endl;
-        return false;
+    catch (const std::exception& e)
+    {
+        char message[200];
+        std::sprintf(message, "Could not create a Vulkan instance: %s", e.what());
+        throw std::exception(message);
+        
     }
+}
 
-    return true;
+void VulkanAPI::preRelease()
+{
+    if (instance != nullptr)
+    {
+        if (surface != nullptr)
+        {
+            instance.destroySurfaceKHR(surface);
+        }
+    }
 }
 
 void VulkanAPI::release()
 {
-    instance.destroySurfaceKHR(surface);
-    SDLAPI::release();
-    instance.destroy();
+    if (instance != nullptr)
+    {
+        instance.destroy();
+    }
 }

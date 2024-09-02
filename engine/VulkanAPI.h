@@ -1,11 +1,16 @@
 #pragma once
 
+#include "SDLAPI.h"
+
 class VulkanAPI
 {
+public:
+	void init(const SDLAPI& sdlApi);
+
 private:
-	static bool init();
-	static bool createInstance();
-	static void release();
+	void createInstance();
+	void preRelease();
+	void release();
 
 friend class Platform;
 };

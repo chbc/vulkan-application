@@ -2,22 +2,27 @@
 #include "VulkanAPI.h"
 #include "SDLAPI.h"
 
-bool Platform::init()
+#include "SDL2/SDL_video.h"
+
+Platform::~Platform()
 {
-    return VulkanAPI::init();
+    vulkanApi.preRelease();
+    sdlApi.release();
+    vulkanApi.release();
+}
+
+void Platform::init()
+{
+    sdlApi.init(SDL_WINDOW_VULKAN);
+    vulkanApi.init(sdlApi);
 }
 
 void Platform::processInput(bool& stillRunning)
 {
-    SDLAPI::processInput(stillRunning);
+    sdlApi.processInput(stillRunning);
 }
 
 void Platform::processFrameEnd()
 {
-    SDLAPI::processFrameEnd();
-}
-
-void Platform::release()
-{
-    VulkanAPI::release();
+    sdlApi.processFrameEnd();
 }
