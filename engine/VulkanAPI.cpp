@@ -21,7 +21,7 @@ void VulkanAPI::init(const SDLAPI& sdlApi)
     }
     
     extensions.resize(extension_count);
-    if (SDL_Vulkan_GetInstanceExtensions(sdlApi.window, &extension_count, extensions.data()))
+    if (!SDL_Vulkan_GetInstanceExtensions(sdlApi.window, &extension_count, extensions.data()))
     {
         throw std::exception("Could not get the names of required instance extensions from SDL.");
     }
