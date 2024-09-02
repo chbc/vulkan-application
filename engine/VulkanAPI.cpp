@@ -4,7 +4,6 @@
 #include <vulkan/vulkan.hpp>
 
 #include <iostream>
-#include <vector>
 
 vk::SurfaceKHR surface = nullptr;
 vk::Instance instance = nullptr;
@@ -44,6 +43,10 @@ void VulkanAPI::createInstance()
     std::vector<const char*> layers;
 #if defined(_DEBUG)
     layers.push_back("VK_LAYER_KHRONOS_validation");
+    if (!checkValidationLayerSupport(layers))
+    {
+        throw std::runtime_error("Validation layers requested, bot not available!");
+    }
 #endif
 
     // vk::ApplicationInfo allows the programmer to specifiy some basic information about the
@@ -77,6 +80,32 @@ void VulkanAPI::createInstance()
         throw std::exception(message);
         
     }
+}
+
+bool VulkanAPI::checkValidationLayerSupport(const std::vector<const char*>& validationLayers)
+{
+    uint32_t layerCount;
+    vk::enumerateInstanceLayerProperties(&layerCount, nullptr);
+
+    std::vector<vk::LayerProperties> availableLayers(layerCount);
+    vk::enumerateInstanceLayerProperties(&layerCount, availableLayers.data());
+
+    bool result = false;
+
+    for (const char* layerName : validationLayers)
+    {
+        result = false;
+        for (const auto& layerProperties : availableLayers)
+        {
+            if (strcmp(layerName, layerProperties.layerName) == 0)
+            {
+                result = true;
+                break;
+            }
+        }
+    }
+
+    return result;
 }
 
 void VulkanAPI::preRelease()
