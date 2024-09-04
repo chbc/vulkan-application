@@ -7,23 +7,51 @@
 
 vk::SurfaceKHR surface = nullptr;
 vk::Instance instance = nullptr;
+VkDebugUtilsMessengerEXT debugMessenger;
 
-unsigned extension_count;
-std::vector<const char*> extensions;
+VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger)
+{
+    auto func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
+    if (func != nullptr)
+    {
+        return func(instance, pCreateInfo, pAllocator, pDebugMessenger);
+    }
+
+    return VK_ERROR_EXTENSION_NOT_PRESENT;
+}
+
+VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
+    VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+    VkDebugUtilsMessageTypeFlagsEXT messageType,
+    const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
+    void* pUserData)
+{
+    std::cerr << "validation layer: " << pCallbackData->pMessage << std::endl;
+
+    return VK_FALSE;
+}
+
+void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& messengerCreateInfo)
+{
+    messengerCreateInfo = {};
+    messengerCreateInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+    messengerCreateInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+    messengerCreateInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+    messengerCreateInfo.pfnUserCallback = debugCallback;
+}
+
+void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks* pAllocator)
+{
+    auto func = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
+    if (func != nullptr)
+    {
+        func(instance, debugMessenger, pAllocator);
+    }
+}
 
 void VulkanAPI::init(const SDLAPI& sdlApi)
 {
-    // Get WSI extensions from SDL (we can add more if we like - we just can't remove these)
-    if (!SDL_Vulkan_GetInstanceExtensions(sdlApi.window, &extension_count, NULL))
-    {
-        throw std::exception("Could not get the number of required instance extensions from SDL.");
-    }
-    
-    extensions.resize(extension_count);
-    if (!SDL_Vulkan_GetInstanceExtensions(sdlApi.window, &extension_count, extensions.data()))
-    {
-        throw std::exception("Could not get the names of required instance extensions from SDL.");
-    }
+    getRequiredExtensions(sdlApi);
 
     createInstance();
 
@@ -40,10 +68,10 @@ void VulkanAPI::init(const SDLAPI& sdlApi)
 void VulkanAPI::createInstance()
 {
     // Use validation layers if this is a debug build
-    std::vector<const char*> layers;
+    std::vector<const char*> validationLayers;
 #if defined(_DEBUG)
-    layers.push_back("VK_LAYER_KHRONOS_validation");
-    if (!checkValidationLayerSupport(layers))
+    validationLayers.push_back("VK_LAYER_KHRONOS_validation");
+    if (!checkValidationLayerSupport(validationLayers))
     {
         throw std::runtime_error("Validation layers requested, bot not available!");
     }
@@ -65,8 +93,15 @@ void VulkanAPI::createInstance()
         .setPApplicationInfo(&appInfo)
         .setEnabledExtensionCount(static_cast<uint32_t>(extensions.size()))
         .setPpEnabledExtensionNames(extensions.data())
-        .setEnabledLayerCount(static_cast<uint32_t>(layers.size()))
-        .setPpEnabledLayerNames(layers.data());
+        .setEnabledLayerCount(static_cast<uint32_t>(validationLayers.size()))
+        .setPpEnabledLayerNames(validationLayers.data());
+
+#if defined(_DEBUG)
+    VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo;
+    populateDebugMessengerCreateInfo(debugCreateInfo);
+
+    createInfo.setPNext((VkDebugUtilsMessengerCreateInfoEXT*)&debugCreateInfo);
+#endif
 
     // Create the Vulkan instance.
     try
@@ -108,6 +143,39 @@ bool VulkanAPI::checkValidationLayerSupport(const std::vector<const char*>& vali
     return result;
 }
 
+void VulkanAPI::getRequiredExtensions(const SDLAPI& sdlApi)
+{
+    unsigned extension_count;
+    // Get WSI extensions from SDL (we can add more if we like - we just can't remove these)
+    if (!SDL_Vulkan_GetInstanceExtensions(sdlApi.window, &extension_count, NULL))
+    {
+        throw std::exception("Could not get the number of required instance extensions from SDL.");
+    }
+
+    extensions.resize(extension_count);
+    if (!SDL_Vulkan_GetInstanceExtensions(sdlApi.window, &extension_count, extensions.data()))
+    {
+        throw std::exception("Could not get the names of required instance extensions from SDL.");
+    }
+
+#if defined(_DEBUG)
+    extensions.push_back("VK_EXT_debug_utils");
+#endif
+}
+
+void VulkanAPI::setupDebugMessenger()
+{
+#if defined(_DEBUG)
+    VkDebugUtilsMessengerCreateInfoEXT messengerCreateInfo;
+    populateDebugMessengerCreateInfo(messengerCreateInfo);
+
+    if (CreateDebugUtilsMessengerEXT(instance, &messengerCreateInfo, nullptr, &debugMessenger) != VK_SUCCESS)
+    {
+        throw std::runtime_error("failed to set up debug messenger!");
+    }
+#endif
+}
+
 void VulkanAPI::preRelease()
 {
     if (instance != nullptr)
@@ -123,6 +191,9 @@ void VulkanAPI::release()
 {
     if (instance != nullptr)
     {
+#if defined(_DEBUG)
+        DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
+#endif
         instance.destroy();
     }
 }
