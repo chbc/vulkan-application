@@ -4,6 +4,16 @@
 #include <vulkan/vulkan.hpp>
 
 #include <iostream>
+#include <optional>
+
+struct QueueFamilyIndices
+{
+    std::optional<uint32_t> graphicsFamily;
+    bool isComplete()
+    {
+        return graphicsFamily.has_value();
+    }
+};
 
 vk::SurfaceKHR surface = nullptr;
 vk::Instance instance = nullptr;
@@ -52,8 +62,9 @@ void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT
 void VulkanAPI::init(const SDLAPI& sdlApi)
 {
     getRequiredExtensions(sdlApi);
-
     createInstance();
+    setupDebugMessenger();
+    pickPhysicalDevice();
 
     // Create a Vulkan surface for rendering
     VkSurfaceKHR c_surface;
@@ -174,6 +185,67 @@ void VulkanAPI::setupDebugMessenger()
         throw std::runtime_error("failed to set up debug messenger!");
     }
 #endif
+}
+
+void VulkanAPI::pickPhysicalDevice()
+{
+    uint32_t deviceCount = 0;
+    vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
+
+    if (deviceCount == 0)
+    {
+        throw std::runtime_error("failed to find GPUs with Vulkan support!");
+    }
+
+    std::vector<VkPhysicalDevice> devices(deviceCount);
+    vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data());
+
+    for (const VkPhysicalDevice& device : devices)
+    {
+        if (isDeviceSuitable(device))
+        {
+            physicalDevice = device;
+            break;
+        }
+    }
+
+    if (physicalDevice == VK_NULL_HANDLE)
+    {
+        throw std::runtime_error("failed to find a suitable GPU!");
+    }
+
+}
+
+bool VulkanAPI::isDeviceSuitable(const VkPhysicalDevice& device)
+{
+    QueueFamilyIndices indices = findQueueFamilies(device);
+    return indices.isComplete();
+}
+
+QueueFamilyIndices VulkanAPI::findQueueFamilies(const VkPhysicalDevice& device)
+{
+    QueueFamilyIndices indices;
+
+    uint32_t queueFamilyCount = 0;
+    vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
+
+    std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
+    vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies.data());
+
+    for (int i = 0; i < queueFamilies.size(); ++i)
+    {
+        if (queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)
+        {
+            indices.graphicsFamily = i;
+        }
+
+        if (indices.isComplete())
+        {
+            break;
+        }
+    }
+
+    return indices;
 }
 
 void VulkanAPI::preRelease()
