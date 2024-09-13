@@ -8,7 +8,10 @@
 #include "SDLAPI.h"
 #include <vector>
 
-typedef struct VkPhysicalDevice_T* VkPhysicalDevice;
+namespace vk
+{
+	class PhysicalDevice;
+}
 
 struct QueueFamilyIndices;
 
@@ -16,19 +19,21 @@ class VulkanAPI
 {
 private:
 	std::vector<const char*> extensions;
-	VkPhysicalDevice physicalDevice;
+	std::vector<const char*> validationLayers;
 
 public:
 	void init(const SDLAPI& sdlApi);
 
 private:
 	void createInstance();
-	bool checkValidationLayerSupport(const std::vector<const char*>& validationLayers);
+	bool checkValidationLayerSupport();
 	void getRequiredExtensions(const SDLAPI& sdlApi);
 	void setupDebugMessenger();
+	void createSurface(const SDLAPI& sdlApi);
 	void pickPhysicalDevice();
-	bool isDeviceSuitable(const VkPhysicalDevice& device);
-	QueueFamilyIndices findQueueFamilies(const VkPhysicalDevice& device);
+	void createLogicalDevice();
+	bool isDeviceSuitable(const vk::PhysicalDevice& device);
+	QueueFamilyIndices findQueueFamilies(const vk::PhysicalDevice& device);
 	void preRelease();
 	void release();
 

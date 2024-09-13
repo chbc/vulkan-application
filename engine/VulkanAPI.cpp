@@ -5,18 +5,26 @@
 
 #include <iostream>
 #include <optional>
+#include <set>
 
 struct QueueFamilyIndices
 {
     std::optional<uint32_t> graphicsFamily;
+    std::optional<uint32_t> presentFamily;
+
     bool isComplete()
     {
-        return graphicsFamily.has_value();
+        return graphicsFamily.has_value() && presentFamily.has_value();
     }
 };
 
 vk::SurfaceKHR surface = nullptr;
 vk::Instance instance = nullptr;
+vk::PhysicalDevice physicalDevice;
+vk::Device device;
+vk::Queue graphicsQueue;
+vk::Queue presentQueue;
+
 VkDebugUtilsMessengerEXT debugMessenger;
 
 VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger)
@@ -64,25 +72,16 @@ void VulkanAPI::init(const SDLAPI& sdlApi)
     getRequiredExtensions(sdlApi);
     createInstance();
     setupDebugMessenger();
+    createSurface(sdlApi);
     pickPhysicalDevice();
-
-    // Create a Vulkan surface for rendering
-    VkSurfaceKHR c_surface;
-    if (!SDL_Vulkan_CreateSurface(sdlApi.window, static_cast<VkInstance>(instance), &c_surface))
-    {
-        throw std::exception("Could not create a Vulkan surface.");
-    }
-
-    surface = c_surface;
+    createLogicalDevice();
 }
 
 void VulkanAPI::createInstance()
 {
-    // Use validation layers if this is a debug build
-    std::vector<const char*> validationLayers;
 #if defined(_DEBUG)
     validationLayers.push_back("VK_LAYER_KHRONOS_validation");
-    if (!checkValidationLayerSupport(validationLayers))
+    if (!checkValidationLayerSupport())
     {
         throw std::runtime_error("Validation layers requested, bot not available!");
     }
@@ -122,19 +121,25 @@ void VulkanAPI::createInstance()
     catch (const std::exception& e)
     {
         char message[200];
-        std::sprintf(message, "Could not create a Vulkan instance: %s", e.what());
+        sprintf_s(message, "Could not create a Vulkan instance: %s", e.what());
         throw std::exception(message);
         
     }
 }
 
-bool VulkanAPI::checkValidationLayerSupport(const std::vector<const char*>& validationLayers)
+bool VulkanAPI::checkValidationLayerSupport()
 {
     uint32_t layerCount;
-    vk::enumerateInstanceLayerProperties(&layerCount, nullptr);
+    if (vk::enumerateInstanceLayerProperties(&layerCount, nullptr) != vk::Result::eSuccess)
+    {
+        return false;
+    }
 
     std::vector<vk::LayerProperties> availableLayers(layerCount);
-    vk::enumerateInstanceLayerProperties(&layerCount, availableLayers.data());
+    if (vk::enumerateInstanceLayerProperties(&layerCount, availableLayers.data()) != vk::Result::eSuccess)
+    {
+        return false;
+    }
 
     bool result = false;
 
@@ -187,20 +192,28 @@ void VulkanAPI::setupDebugMessenger()
 #endif
 }
 
+void VulkanAPI::createSurface(const SDLAPI& sdlApi)
+{
+    // Create a Vulkan surface for rendering
+    VkSurfaceKHR c_surface;
+    if (!SDL_Vulkan_CreateSurface(sdlApi.window, static_cast<VkInstance>(instance), &c_surface))
+    {
+        throw std::exception("Could not create a Vulkan surface.");
+    }
+
+    surface = c_surface;
+}
+
 void VulkanAPI::pickPhysicalDevice()
 {
-    uint32_t deviceCount = 0;
-    vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
+    std::vector<vk::PhysicalDevice> devices = instance.enumeratePhysicalDevices();
 
-    if (deviceCount == 0)
+    if (devices.empty())
     {
         throw std::runtime_error("failed to find GPUs with Vulkan support!");
     }
 
-    std::vector<VkPhysicalDevice> devices(deviceCount);
-    vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data());
-
-    for (const VkPhysicalDevice& device : devices)
+    for (const vk::PhysicalDevice& device : devices)
     {
         if (isDeviceSuitable(device))
         {
@@ -209,34 +222,77 @@ void VulkanAPI::pickPhysicalDevice()
         }
     }
 
-    if (physicalDevice == VK_NULL_HANDLE)
+    if (!physicalDevice)
     {
         throw std::runtime_error("failed to find a suitable GPU!");
     }
-
 }
 
-bool VulkanAPI::isDeviceSuitable(const VkPhysicalDevice& device)
+void VulkanAPI::createLogicalDevice()
+{
+    QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
+
+    std::vector<vk::DeviceQueueCreateInfo> queueCreateInfos;
+    std::set<uint32_t> uniqueQueueFamilies = { indices.graphicsFamily.value(), indices.presentFamily.value() };
+
+    float queuePriority = 1.0f;
+    for (uint32_t queueFamily : uniqueQueueFamilies)
+    {
+        vk::DeviceQueueCreateInfo queueCreateInfo = vk::DeviceQueueCreateInfo()
+            .setQueueFamilyIndex(queueFamily)
+            .setQueueCount(1)
+            .setQueuePriorities(queuePriority);
+
+        queueCreateInfos.push_back(queueCreateInfo);
+    }
+
+    vk::PhysicalDeviceFeatures deviceFeatures{};
+    vk::DeviceCreateInfo createInfo = vk::DeviceCreateInfo()
+        .setPQueueCreateInfos(queueCreateInfos.data())
+        .setQueueCreateInfoCount(static_cast<uint32_t>(queueCreateInfos.size()))
+        .setPEnabledFeatures(&deviceFeatures)
+        .setEnabledExtensionCount(0);
+
+#if defined(_DEBUG)
+    createInfo.setEnabledLayerCount(static_cast<uint32_t>(validationLayers.size()))
+        .setPpEnabledLayerNames(validationLayers.data());
+#else
+    createInfo.setEnabledLayerCount(0);
+#endif
+
+    device = physicalDevice.createDevice(createInfo);
+
+    if (!device)
+    {
+        throw std::runtime_error("failed to create logical device!");
+    }
+
+    graphicsQueue = device.getQueue(indices.graphicsFamily.value(), 0);
+    presentQueue = device.getQueue(indices.presentFamily.value(), 0);
+}
+
+bool VulkanAPI::isDeviceSuitable(const vk::PhysicalDevice& device)
 {
     QueueFamilyIndices indices = findQueueFamilies(device);
     return indices.isComplete();
 }
 
-QueueFamilyIndices VulkanAPI::findQueueFamilies(const VkPhysicalDevice& device)
+QueueFamilyIndices VulkanAPI::findQueueFamilies(const vk::PhysicalDevice& device)
 {
     QueueFamilyIndices indices;
 
-    uint32_t queueFamilyCount = 0;
-    vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
-
-    std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
-    vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies.data());
+    std::vector<vk::QueueFamilyProperties> queueFamilies = device.getQueueFamilyProperties();
 
     for (int i = 0; i < queueFamilies.size(); ++i)
     {
-        if (queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)
+        if (queueFamilies[i].queueFlags & vk::QueueFlagBits::eGraphics)
         {
             indices.graphicsFamily = i;
+        }
+
+        if (device.getSurfaceSupportKHR(i, surface) == VK_SUCCESS)
+        {
+            indices.presentFamily = i;
         }
 
         if (indices.isComplete())
@@ -261,6 +317,7 @@ void VulkanAPI::preRelease()
 
 void VulkanAPI::release()
 {
+    device.destroy();
     if (instance != nullptr)
     {
 #if defined(_DEBUG)
