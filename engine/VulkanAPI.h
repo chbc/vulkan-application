@@ -11,9 +11,14 @@
 namespace vk
 {
 	class PhysicalDevice;
+	struct SurfaceFormatKHR;
+	enum class PresentModeKHR;
+	struct Extent2D;
+	struct SurfaceCapabilitiesKHR;
 }
 
 struct QueueFamilyIndices;
+struct SwapChainSupportDetails;
 
 class VulkanAPI
 {
@@ -26,14 +31,20 @@ public:
 
 private:
 	void createInstance();
-	bool checkValidationLayerSupport();
-	void getRequiredExtensions(const SDLAPI& sdlApi);
 	void setupDebugMessenger();
 	void createSurface(const SDLAPI& sdlApi);
 	void pickPhysicalDevice();
 	void createLogicalDevice();
+	void createSwapChain(const SDLAPI& sdlApi);
+	vk::SurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats);
+	vk::PresentModeKHR chooseSwapPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes);
+	vk::Extent2D chooseSwapExtent(const SDLAPI& sdlApi, const vk::SurfaceCapabilitiesKHR& capabilities);
+	SwapChainSupportDetails querySwapChainSupport(const vk::PhysicalDevice& device);
 	bool isDeviceSuitable(const vk::PhysicalDevice& device);
+	bool checkDeviceExtensionSupport(const vk::PhysicalDevice& device);
 	QueueFamilyIndices findQueueFamilies(const vk::PhysicalDevice& device);
+	void getRequiredExtensions(const SDLAPI& sdlApi);
+	bool checkValidationLayerSupport();
 	void preRelease();
 	void release();
 

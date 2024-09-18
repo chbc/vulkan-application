@@ -18,12 +18,26 @@ struct QueueFamilyIndices
     }
 };
 
+struct SwapChainSupportDetails
+{
+    vk::SurfaceCapabilitiesKHR capabilities;
+    std::vector<vk::SurfaceFormatKHR> formats;
+    std::vector<vk::PresentModeKHR> presentModes;
+};
+
 vk::SurfaceKHR surface = nullptr;
 vk::Instance instance = nullptr;
 vk::PhysicalDevice physicalDevice;
 vk::Device device;
 vk::Queue graphicsQueue;
 vk::Queue presentQueue;
+
+vk::SwapchainKHR swapChain;
+std::vector<vk::Image> swapChainImages;
+vk::Format swapChainImageFormat;
+vk::Extent2D swapChainExtent;
+
+const std::vector<const char*> deviceExtensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
 
 VkDebugUtilsMessengerEXT debugMessenger;
 
@@ -36,6 +50,15 @@ VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMes
     }
 
     return VK_ERROR_EXTENSION_NOT_PRESENT;
+}
+
+void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks* pAllocator)
+{
+    auto func = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
+    if (func != nullptr)
+    {
+        func(instance, debugMessenger, pAllocator);
+    }
 }
 
 VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
@@ -58,15 +81,6 @@ void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& messen
     messengerCreateInfo.pfnUserCallback = debugCallback;
 }
 
-void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks* pAllocator)
-{
-    auto func = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
-    if (func != nullptr)
-    {
-        func(instance, debugMessenger, pAllocator);
-    }
-}
-
 void VulkanAPI::init(const SDLAPI& sdlApi)
 {
     getRequiredExtensions(sdlApi);
@@ -75,6 +89,7 @@ void VulkanAPI::init(const SDLAPI& sdlApi)
     createSurface(sdlApi);
     pickPhysicalDevice();
     createLogicalDevice();
+    createSwapChain(sdlApi);
 }
 
 void VulkanAPI::createInstance()
@@ -125,58 +140,6 @@ void VulkanAPI::createInstance()
         throw std::exception(message);
         
     }
-}
-
-bool VulkanAPI::checkValidationLayerSupport()
-{
-    uint32_t layerCount;
-    if (vk::enumerateInstanceLayerProperties(&layerCount, nullptr) != vk::Result::eSuccess)
-    {
-        return false;
-    }
-
-    std::vector<vk::LayerProperties> availableLayers(layerCount);
-    if (vk::enumerateInstanceLayerProperties(&layerCount, availableLayers.data()) != vk::Result::eSuccess)
-    {
-        return false;
-    }
-
-    bool result = false;
-
-    for (const char* layerName : validationLayers)
-    {
-        result = false;
-        for (const auto& layerProperties : availableLayers)
-        {
-            if (strcmp(layerName, layerProperties.layerName) == 0)
-            {
-                result = true;
-                break;
-            }
-        }
-    }
-
-    return result;
-}
-
-void VulkanAPI::getRequiredExtensions(const SDLAPI& sdlApi)
-{
-    unsigned extension_count;
-    // Get WSI extensions from SDL (we can add more if we like - we just can't remove these)
-    if (!SDL_Vulkan_GetInstanceExtensions(sdlApi.window, &extension_count, NULL))
-    {
-        throw std::exception("Could not get the number of required instance extensions from SDL.");
-    }
-
-    extensions.resize(extension_count);
-    if (!SDL_Vulkan_GetInstanceExtensions(sdlApi.window, &extension_count, extensions.data()))
-    {
-        throw std::exception("Could not get the names of required instance extensions from SDL.");
-    }
-
-#if defined(_DEBUG)
-    extensions.push_back("VK_EXT_debug_utils");
-#endif
 }
 
 void VulkanAPI::setupDebugMessenger()
@@ -251,7 +214,8 @@ void VulkanAPI::createLogicalDevice()
         .setPQueueCreateInfos(queueCreateInfos.data())
         .setQueueCreateInfoCount(static_cast<uint32_t>(queueCreateInfos.size()))
         .setPEnabledFeatures(&deviceFeatures)
-        .setEnabledExtensionCount(0);
+        .setEnabledExtensionCount(static_cast<uint32_t>(deviceExtensions.size()))
+        .setPpEnabledExtensionNames(deviceExtensions.data());
 
 #if defined(_DEBUG)
     createInfo.setEnabledLayerCount(static_cast<uint32_t>(validationLayers.size()))
@@ -271,10 +235,144 @@ void VulkanAPI::createLogicalDevice()
     presentQueue = device.getQueue(indices.presentFamily.value(), 0);
 }
 
+void VulkanAPI::createSwapChain(const SDLAPI& sdlApi)
+{
+    SwapChainSupportDetails swapChainSupport = querySwapChainSupport(physicalDevice);
+
+    vk::SurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats);
+    vk::PresentModeKHR presentMode = chooseSwapPresentMode(swapChainSupport.presentModes);
+    vk::Extent2D extent = chooseSwapExtent(sdlApi, swapChainSupport.capabilities);
+
+    uint32_t imageCount = swapChainSupport.capabilities.minImageCount + 1;
+    if ((swapChainSupport.capabilities.maxImageCount > 0) && (imageCount > swapChainSupport.capabilities.maxImageCount))
+    {
+        imageCount = swapChainSupport.capabilities.maxImageCount;
+    }
+
+    vk::SwapchainCreateInfoKHR createInfo = vk::SwapchainCreateInfoKHR()
+        .setSurface(surface)
+        .setMinImageCount(imageCount)
+        .setImageFormat(surfaceFormat.format)
+        .setImageColorSpace(surfaceFormat.colorSpace)
+        // XXX .setImageExtent(extent)
+        .setImageArrayLayers(1)
+        .setImageUsage(vk::ImageUsageFlagBits::eColorAttachment)
+        .setPreTransform(swapChainSupport.capabilities.currentTransform)
+        .setCompositeAlpha(vk::CompositeAlphaFlagBitsKHR::eOpaque)
+        .setPresentMode(presentMode)
+        .setClipped(vk::True)
+        .setOldSwapchain(nullptr);
+
+    QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
+    uint32_t queueFamilyIndices[] = { indices.graphicsFamily.value(), indices.presentFamily.value() };
+
+    if (indices.graphicsFamily != indices.presentFamily)
+    {
+        createInfo.setImageSharingMode(vk::SharingMode::eConcurrent);
+        createInfo.setQueueFamilyIndexCount(2);
+        createInfo.setPQueueFamilyIndices(queueFamilyIndices);
+    }
+    else
+    {
+        createInfo.setImageSharingMode(vk::SharingMode::eExclusive);
+        createInfo.setQueueFamilyIndexCount(0);
+        createInfo.setPQueueFamilyIndices(nullptr);
+    }
+
+    swapChain = device.createSwapchainKHR(createInfo);
+    swapChainImages = device.getSwapchainImagesKHR(swapChain);
+    swapChainImageFormat = surfaceFormat.format;
+    swapChainExtent = extent;
+}
+
+vk::SurfaceFormatKHR VulkanAPI::chooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats)
+{
+    for (const auto& availableFormat : availableFormats)
+    {
+        if ((availableFormat.format == vk::Format::eB8G8R8A8Srgb) &&
+            (availableFormat.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear)
+            )
+        {
+            return availableFormat;
+        }
+    }
+
+    return availableFormats[0];
+}
+
+vk::PresentModeKHR VulkanAPI::chooseSwapPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes)
+{
+    for (const auto& availablePresentMode : availablePresentModes)
+    {
+        if (availablePresentMode == vk::PresentModeKHR::eMailbox)
+        {
+            return availablePresentMode;
+        }
+    }
+
+    return vk::PresentModeKHR::eFifo;
+}
+
+vk::Extent2D VulkanAPI::chooseSwapExtent(const SDLAPI& sdlApi, const vk::SurfaceCapabilitiesKHR& capabilities)
+{
+    if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max())
+    {
+        return capabilities.currentExtent;
+    }
+
+    int width, height;
+    SDL_Vulkan_GetDrawableSize(sdlApi.window, &width, &height);
+
+    vk::Extent2D actualExtent = { static_cast<uint32_t>(width), static_cast<uint32_t>(height) };
+    actualExtent.width = std::clamp
+    (
+        actualExtent.width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width
+    );
+
+    actualExtent.height = std::clamp
+    (
+        actualExtent.height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height
+    );
+
+    return actualExtent;
+}
+
+SwapChainSupportDetails VulkanAPI::querySwapChainSupport(const vk::PhysicalDevice& device)
+{
+    SwapChainSupportDetails details;
+    details.capabilities = device.getSurfaceCapabilitiesKHR(surface);
+    details.formats = device.getSurfaceFormatsKHR(surface);
+    details.presentModes = device.getSurfacePresentModesKHR(surface);
+
+    return details;
+}
+
 bool VulkanAPI::isDeviceSuitable(const vk::PhysicalDevice& device)
 {
     QueueFamilyIndices indices = findQueueFamilies(device);
-    return indices.isComplete();
+    bool extensionsSupported = checkDeviceExtensionSupport(device);
+    bool swapChainAdequate = false;
+
+    if (extensionsSupported)
+    {
+        SwapChainSupportDetails swapChainSupport = querySwapChainSupport(device);
+        swapChainAdequate = !swapChainSupport.formats.empty() && !swapChainSupport.presentModes.empty();
+    }
+
+    return indices.isComplete() && extensionsSupported && swapChainAdequate;
+}
+
+bool VulkanAPI::checkDeviceExtensionSupport(const vk::PhysicalDevice& device)
+{
+    std::vector<vk::ExtensionProperties> availableExtensions = device.enumerateDeviceExtensionProperties();
+    std::set<std::string> requiredExtensions(deviceExtensions.begin(), deviceExtensions.end());
+
+    for (const vk::ExtensionProperties& extension : availableExtensions)
+    {
+        requiredExtensions.erase(extension.extensionName);
+    }
+
+    return requiredExtensions.empty();
 }
 
 QueueFamilyIndices VulkanAPI::findQueueFamilies(const vk::PhysicalDevice& device)
@@ -304,10 +402,67 @@ QueueFamilyIndices VulkanAPI::findQueueFamilies(const vk::PhysicalDevice& device
     return indices;
 }
 
+void VulkanAPI::getRequiredExtensions(const SDLAPI& sdlApi)
+{
+    unsigned extension_count;
+    // Get WSI extensions from SDL (we can add more if we like - we just can't remove these)
+    if (!SDL_Vulkan_GetInstanceExtensions(sdlApi.window, &extension_count, NULL))
+    {
+        throw std::exception("Could not get the number of required instance extensions from SDL.");
+    }
+
+    extensions.resize(extension_count);
+    if (!SDL_Vulkan_GetInstanceExtensions(sdlApi.window, &extension_count, extensions.data()))
+    {
+        throw std::exception("Could not get the names of required instance extensions from SDL.");
+    }
+
+#if defined(_DEBUG)
+    extensions.push_back("VK_EXT_debug_utils");
+#endif
+}
+
+bool VulkanAPI::checkValidationLayerSupport()
+{
+    uint32_t layerCount;
+    if (vk::enumerateInstanceLayerProperties(&layerCount, nullptr) != vk::Result::eSuccess)
+    {
+        return false;
+    }
+
+    std::vector<vk::LayerProperties> availableLayers(layerCount);
+    if (vk::enumerateInstanceLayerProperties(&layerCount, availableLayers.data()) != vk::Result::eSuccess)
+    {
+        return false;
+    }
+
+    bool result = false;
+
+    for (const char* layerName : validationLayers)
+    {
+        result = false;
+        for (const auto& layerProperties : availableLayers)
+        {
+            if (strcmp(layerName, layerProperties.layerName) == 0)
+            {
+                result = true;
+                break;
+            }
+        }
+    }
+
+    return result;
+}
+
 void VulkanAPI::preRelease()
 {
     if (instance != nullptr)
     {
+        device.destroySwapchainKHR(swapChain);
+        device.destroy();
+#if defined(_DEBUG)
+        DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
+#endif
         if (surface != nullptr)
         {
             instance.destroySurfaceKHR(surface);
@@ -317,12 +472,8 @@ void VulkanAPI::preRelease()
 
 void VulkanAPI::release()
 {
-    device.destroy();
     if (instance != nullptr)
     {
-#if defined(_DEBUG)
-        DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
-#endif
         instance.destroy();
     }
 }
