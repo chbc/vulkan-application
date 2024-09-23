@@ -19,10 +19,10 @@
     <ClCompile Include="main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="engine\VulkanAPI.cpp">
+    <ClCompile Include="engine\vulkan\VulkanAPI.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="engine\SDLAPI.cpp">
+    <ClCompile Include="engine\sdl\SDLAPI.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="engine\Platform.cpp">
@@ -30,13 +30,16 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="engine\VulkanAPI.h">
+    <ClInclude Include="engine\vulkan\VulkanAPI.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="engine\SDLAPI.h">
+    <ClInclude Include="engine\sdl\SDLAPI.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="engine\Platform.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="engine\Utils.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

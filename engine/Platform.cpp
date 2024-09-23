@@ -1,6 +1,4 @@
 #include "Platform.h"
-#include "VulkanAPI.h"
-#include "SDLAPI.h"
 
 #include "SDL2/SDL_video.h"
 

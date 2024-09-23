@@ -5,7 +5,7 @@
 
 #pragma once
 
-#include "SDLAPI.h"
+#include "engine/sdl/SDLAPI.h"
 #include <vector>
 
 namespace vk
@@ -15,6 +15,7 @@ namespace vk
 	enum class PresentModeKHR;
 	struct Extent2D;
 	struct SurfaceCapabilitiesKHR;
+	class ShaderModule;
 }
 
 struct QueueFamilyIndices;
@@ -36,6 +37,9 @@ private:
 	void pickPhysicalDevice();
 	void createLogicalDevice();
 	void createSwapChain(const SDLAPI& sdlApi);
+	void createImageViews();
+	void createGraphicsPipeline();
+	vk::ShaderModule createShaderModule(const std::vector<char>& code);
 	vk::SurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats);
 	vk::PresentModeKHR chooseSwapPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes);
 	vk::Extent2D chooseSwapExtent(const SDLAPI& sdlApi, const vk::SurfaceCapabilitiesKHR& capabilities);

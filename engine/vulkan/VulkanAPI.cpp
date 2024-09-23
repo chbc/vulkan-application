@@ -1,5 +1,7 @@
 #include "VulkanAPI.h"
 
+#include "engine/Utils.h"
+
 #include <SDL2/SDL_vulkan.h>
 #include <vulkan/vulkan.hpp>
 
@@ -36,6 +38,7 @@ vk::SwapchainKHR swapChain;
 std::vector<vk::Image> swapChainImages;
 vk::Format swapChainImageFormat;
 vk::Extent2D swapChainExtent;
+std::vector<vk::ImageView> swapChainImageViews;
 
 const std::vector<const char*> deviceExtensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
 
@@ -90,6 +93,8 @@ void VulkanAPI::init(const SDLAPI& sdlApi)
     pickPhysicalDevice();
     createLogicalDevice();
     createSwapChain(sdlApi);
+    createImageViews();
+    createGraphicsPipeline();
 }
 
 void VulkanAPI::createInstance()
@@ -285,6 +290,68 @@ void VulkanAPI::createSwapChain(const SDLAPI& sdlApi)
     swapChainExtent = extent;
 }
 
+void VulkanAPI::createImageViews()
+{
+    swapChainImageViews.resize(swapChainImages.size());
+    for (size_t i = 0; i < swapChainImages.size(); i++)
+    {
+        vk::ComponentMapping components
+        {
+            vk::ComponentSwizzle::eIdentity, vk::ComponentSwizzle::eIdentity,
+            vk::ComponentSwizzle::eIdentity, vk::ComponentSwizzle::eIdentity
+        };
+
+        vk::ImageSubresourceRange subresourceRange{ vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 };
+
+        vk::ImageViewCreateInfo createInfo = vk::ImageViewCreateInfo()
+            .setImage(swapChainImages[i])
+            .setViewType(vk::ImageViewType::e2D)
+            .setFormat(swapChainImageFormat)
+            .setComponents(components)
+            .setSubresourceRange(subresourceRange);
+
+        swapChainImageViews[i] = device.createImageView(createInfo);
+        if (swapChainImageViews[i] == nullptr)
+        {
+            throw std::runtime_error("Failed to create image views!");
+        }
+    }
+}
+
+void VulkanAPI::createGraphicsPipeline()
+{
+    std::vector<char> vertShaderCode = Utils::readFile("../../shaders/vert.spv");
+    std::vector<char> fragShaderCode = Utils::readFile("../../shaders/frag.spv");
+
+    vk::ShaderModule vertShaderModule = createShaderModule(vertShaderCode);
+    vk::ShaderModule fragShaderModule = createShaderModule(fragShaderCode);
+
+    vk::PipelineShaderStageCreateInfo vertShaderStageInfo = vk::PipelineShaderStageCreateInfo()
+        .setStage(vk::ShaderStageFlagBits::eVertex)
+        .setModule(vertShaderModule)
+        .setPName("main");
+
+    vk::PipelineShaderStageCreateInfo fragShaderStageInfo = vk::PipelineShaderStageCreateInfo()
+        .setStage(vk::ShaderStageFlagBits::eFragment)
+        .setModule(fragShaderModule)
+        .setPName("main");
+
+    vk::PipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
+
+    device.destroyShaderModule(vertShaderModule);
+    device.destroyShaderModule(fragShaderModule);
+}
+
+vk::ShaderModule VulkanAPI::createShaderModule(const std::vector<char>& code)
+{
+    vk::ShaderModuleCreateInfo createInfo = vk::ShaderModuleCreateInfo()
+        .setCodeSize(code.size())
+        .setPCode(reinterpret_cast<const uint32_t*>(code.data()));
+
+    vk::ShaderModule shaderModule = device.createShaderModule(createInfo);
+    return shaderModule;
+}
+
 vk::SurfaceFormatKHR VulkanAPI::chooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats)
 {
     for (const auto& availableFormat : availableFormats)
@@ -458,6 +525,11 @@ void VulkanAPI::preRelease()
 {
     if (instance != nullptr)
     {
+        for (const vk::ImageView& imageView : swapChainImageViews)
+        {
+            device.destroyImageView(imageView);
+        }
+
         device.destroySwapchainKHR(swapChain);
         device.destroy();
 #if defined(_DEBUG)
