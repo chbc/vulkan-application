@@ -342,6 +342,37 @@ void VulkanAPI::createGraphicsPipeline()
     device.destroyShaderModule(fragShaderModule);
 }
 
+void VulkanAPI::createFixedFunctions()
+{
+    std::vector<vk::DynamicState> dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
+
+    vk::PipelineDynamicStateCreateInfo dynamicState = vk::PipelineDynamicStateCreateInfo()
+        .setDynamicStateCount(static_cast<uint32_t>(dynamicStates.size()))
+        .setPDynamicStates(dynamicStates.data());
+
+    vk::PipelineVertexInputStateCreateInfo vertexInputInfo = vk::PipelineVertexInputStateCreateInfo()
+        .setVertexBindingDescriptionCount(0)
+        .setPVertexBindingDescriptions(nullptr)
+        .setVertexAttributeDescriptionCount(0)
+        .setPVertexAttributeDescriptions(nullptr);
+
+    vk::Viewport viewport = vk::Viewport()
+        .setX(0.0f).setY(0.0f)
+        .setWidth((float)swapChainExtent.width)
+        .setHeight((float)swapChainExtent.height)
+        .setMinDepth(0.0f).setMaxDepth(1.0f);
+
+    vk::Rect2D scissor = vk::Rect2D()
+        .setOffset(0.0f)
+        .setExtent(swapChainExtent);
+
+    vk::PipelineViewportStateCreateInfo viewportState = vk::PipelineViewportStateCreateInfo()
+        .setViewportCount(1)
+        .setPViewports(&viewport)
+        .setScissorCount(1)
+        .setPScissors(&scissor);
+}
+
 vk::ShaderModule VulkanAPI::createShaderModule(const std::vector<char>& code)
 {
     vk::ShaderModuleCreateInfo createInfo = vk::ShaderModuleCreateInfo()

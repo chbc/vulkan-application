@@ -39,6 +39,7 @@ private:
 	void createSwapChain(const SDLAPI& sdlApi);
 	void createImageViews();
 	void createGraphicsPipeline();
+	void createDynamicState();
 	vk::ShaderModule createShaderModule(const std::vector<char>& code);
 	vk::SurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats);
 	vk::PresentModeKHR chooseSwapPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes);
