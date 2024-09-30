@@ -371,6 +371,26 @@ void VulkanAPI::createFixedFunctions()
         .setPViewports(&viewport)
         .setScissorCount(1)
         .setPScissors(&scissor);
+
+    vk::PipelineRasterizationStateCreateInfo rasterizer = vk::PipelineRasterizationStateCreateInfo()
+        .setDepthClampEnable(true)
+        .setRasterizerDiscardEnable(false)
+        .setPolygonMode(vk::PolygonMode::eFill)
+        .setLineWidth(1.0f)
+        .setCullMode(vk::CullModeFlagBits::eBack)
+        .setFrontFace(vk::FrontFace::eClockwise)
+        .setDepthBiasEnable(false)
+        .setDepthBiasConstantFactor(0.0f)
+        .setDepthBiasClamp(0.0f)
+        .setDepthBiasSlopeFactor(0.0f);
+
+    vk::PipelineMultisampleStateCreateInfo multisampling = vk::PipelineMultisampleStateCreateInfo()
+        .setSampleShadingEnable(false)
+        .setRasterizationSamples(vk::SampleCountFlagBits::e1)
+        .setMinSampleShading(1.0f)
+        .setPSampleMask(nullptr)
+        .setAlphaToCoverageEnable(false)
+        .setAlphaToOneEnable(false);
 }
 
 vk::ShaderModule VulkanAPI::createShaderModule(const std::vector<char>& code)
