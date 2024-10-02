@@ -39,6 +39,7 @@ std::vector<vk::Image> swapChainImages;
 vk::Format swapChainImageFormat;
 vk::Extent2D swapChainExtent;
 std::vector<vk::ImageView> swapChainImageViews;
+vk::PipelineLayout pipelineLayout;
 
 const std::vector<const char*> deviceExtensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
 
@@ -338,23 +339,15 @@ void VulkanAPI::createGraphicsPipeline()
 
     vk::PipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
 
-    device.destroyShaderModule(vertShaderModule);
-    device.destroyShaderModule(fragShaderModule);
-}
-
-void VulkanAPI::createFixedFunctions()
-{
-    std::vector<vk::DynamicState> dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
-
-    vk::PipelineDynamicStateCreateInfo dynamicState = vk::PipelineDynamicStateCreateInfo()
-        .setDynamicStateCount(static_cast<uint32_t>(dynamicStates.size()))
-        .setPDynamicStates(dynamicStates.data());
-
     vk::PipelineVertexInputStateCreateInfo vertexInputInfo = vk::PipelineVertexInputStateCreateInfo()
         .setVertexBindingDescriptionCount(0)
         .setPVertexBindingDescriptions(nullptr)
         .setVertexAttributeDescriptionCount(0)
         .setPVertexAttributeDescriptions(nullptr);
+
+    vk::PipelineInputAssemblyStateCreateInfo inputAssembly = vk::PipelineInputAssemblyStateCreateInfo()
+        .setTopology(vk::PrimitiveTopology::eTriangleList)
+        .setPrimitiveRestartEnable(false);
 
     vk::Viewport viewport = vk::Viewport()
         .setX(0.0f).setY(0.0f)
@@ -363,7 +356,7 @@ void VulkanAPI::createFixedFunctions()
         .setMinDepth(0.0f).setMaxDepth(1.0f);
 
     vk::Rect2D scissor = vk::Rect2D()
-        .setOffset(0.0f)
+        .setOffset(vk::Offset2D{ 0, 0 })
         .setExtent(swapChainExtent);
 
     vk::PipelineViewportStateCreateInfo viewportState = vk::PipelineViewportStateCreateInfo()
@@ -391,6 +384,44 @@ void VulkanAPI::createFixedFunctions()
         .setPSampleMask(nullptr)
         .setAlphaToCoverageEnable(false)
         .setAlphaToOneEnable(false);
+
+    vk::PipelineColorBlendAttachmentState colorBlendAttachment = vk::PipelineColorBlendAttachmentState()
+        .setColorWriteMask(vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
+            vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA)
+        .setBlendEnable(false)
+        .setSrcColorBlendFactor(vk::BlendFactor::eOne)
+        .setDstColorBlendFactor(vk::BlendFactor::eZero)
+        .setColorBlendOp(vk::BlendOp::eAdd)
+        .setSrcAlphaBlendFactor(vk::BlendFactor::eOne)
+        .setDstAlphaBlendFactor(vk::BlendFactor::eZero)
+        .setAlphaBlendOp(vk::BlendOp::eAdd);
+
+    vk::PipelineColorBlendStateCreateInfo colorBlending = vk::PipelineColorBlendStateCreateInfo()
+        .setLogicOpEnable(false)
+        .setLogicOp(vk::LogicOp::eCopy)
+        .setAttachmentCount(1)
+        .setPAttachments(&colorBlendAttachment)
+        .setBlendConstants(std::array<float, 4>{ 0.0f, 0.0f, 0.0f, 0.0f });
+
+    std::vector<vk::DynamicState> dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
+
+    vk::PipelineDynamicStateCreateInfo dynamicState = vk::PipelineDynamicStateCreateInfo()
+        .setDynamicStateCount(static_cast<uint32_t>(dynamicStates.size()))
+        .setPDynamicStates(dynamicStates.data());
+
+    vk::PipelineLayoutCreateInfo pipelineLayoutInfo = vk::PipelineLayoutCreateInfo()
+        .setSetLayoutCount(0)
+        .setPSetLayouts(nullptr)
+        .setPushConstantRangeCount(0)
+        .setPPushConstantRanges(nullptr);
+
+    if (device.createPipelineLayout(&pipelineLayoutInfo, nullptr, &pipelineLayout) != vk::Result::eSuccess)
+    {
+        throw std::runtime_error("Failed to create pipeline layout!");
+    }
+
+    device.destroyShaderModule(vertShaderModule);
+    device.destroyShaderModule(fragShaderModule);
 }
 
 vk::ShaderModule VulkanAPI::createShaderModule(const std::vector<char>& code)
