@@ -38,6 +38,7 @@ private:
 	void createLogicalDevice();
 	void createSwapChain(const SDLAPI& sdlApi);
 	void createImageViews();
+	void createRenderPass();
 	void createGraphicsPipeline();
 	vk::ShaderModule createShaderModule(const std::vector<char>& code);
 	vk::SurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats);

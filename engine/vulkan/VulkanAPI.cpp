@@ -39,7 +39,9 @@ std::vector<vk::Image> swapChainImages;
 vk::Format swapChainImageFormat;
 vk::Extent2D swapChainExtent;
 std::vector<vk::ImageView> swapChainImageViews;
+vk::RenderPass renderPass;
 vk::PipelineLayout pipelineLayout;
+vk::Pipeline graphicsPipeline;
 
 const std::vector<const char*> deviceExtensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
 
@@ -95,6 +97,7 @@ void VulkanAPI::init(const SDLAPI& sdlApi)
     createLogicalDevice();
     createSwapChain(sdlApi);
     createImageViews();
+    createRenderPass();
     createGraphicsPipeline();
 }
 
@@ -319,6 +322,39 @@ void VulkanAPI::createImageViews()
     }
 }
 
+void VulkanAPI::createRenderPass()
+{
+    vk::AttachmentDescription colorAttachment = vk::AttachmentDescription()
+        .setFormat(swapChainImageFormat)
+        .setSamples(vk::SampleCountFlagBits::e1)
+        .setLoadOp(vk::AttachmentLoadOp::eClear)
+        .setStoreOp(vk::AttachmentStoreOp::eStore)
+        .setStencilLoadOp(vk::AttachmentLoadOp::eDontCare)
+        .setStencilStoreOp(vk::AttachmentStoreOp::eDontCare)
+        .setInitialLayout(vk::ImageLayout::eUndefined)
+        .setFinalLayout(vk::ImageLayout::ePresentSrcKHR);
+
+    vk::AttachmentReference colorAttachmentRef = vk::AttachmentReference()
+        .setAttachment(0)
+        .setLayout(vk::ImageLayout::eColorAttachmentOptimal);
+
+    vk::SubpassDescription subpass = vk::SubpassDescription()
+        .setPipelineBindPoint(vk::PipelineBindPoint::eGraphics)
+        .setColorAttachmentCount(1)
+        .setPColorAttachments(&colorAttachmentRef);
+
+    vk::RenderPassCreateInfo renderPassInfo = vk::RenderPassCreateInfo()
+        .setAttachmentCount(1)
+        .setPAttachments(&colorAttachment)
+        .setSubpassCount(1)
+        .setPSubpasses(&subpass);
+
+    if (device.createRenderPass(&renderPassInfo, nullptr, &renderPass) != vk::Result::eSuccess)
+    {
+        throw std::runtime_error("Failed to create render pass!");
+    }
+}
+
 void VulkanAPI::createGraphicsPipeline()
 {
     std::vector<char> vertShaderCode = Utils::readFile("../../shaders/vert.spv");
@@ -366,7 +402,7 @@ void VulkanAPI::createGraphicsPipeline()
         .setPScissors(&scissor);
 
     vk::PipelineRasterizationStateCreateInfo rasterizer = vk::PipelineRasterizationStateCreateInfo()
-        .setDepthClampEnable(true)
+        .setDepthClampEnable(false)
         .setRasterizerDiscardEnable(false)
         .setPolygonMode(vk::PolygonMode::eFill)
         .setLineWidth(1.0f)
@@ -418,6 +454,30 @@ void VulkanAPI::createGraphicsPipeline()
     if (device.createPipelineLayout(&pipelineLayoutInfo, nullptr, &pipelineLayout) != vk::Result::eSuccess)
     {
         throw std::runtime_error("Failed to create pipeline layout!");
+    }
+
+    vk::GraphicsPipelineCreateInfo pipelineInfo = vk::GraphicsPipelineCreateInfo()
+        .setStageCount(2)
+        .setPStages(shaderStages)
+        .setPVertexInputState(&vertexInputInfo)
+        .setPInputAssemblyState(&inputAssembly)
+        .setPViewportState(&viewportState)
+        .setPRasterizationState(&rasterizer)
+        .setPMultisampleState(&multisampling)
+        .setPDepthStencilState(nullptr)
+        .setPColorBlendState(&colorBlending)
+        .setPDynamicState(&dynamicState)
+        .setLayout(pipelineLayout)
+        .setRenderPass(renderPass)
+        .setSubpass(0)
+        .setBasePipelineHandle(nullptr)
+        .setBasePipelineIndex(-1);
+
+    vk::Result result;
+    std::tie(result, graphicsPipeline) = device.createGraphicsPipeline(nullptr, pipelineInfo);
+    if (result != vk::Result::eSuccess)
+    {
+        throw std::runtime_error("Failed to create graphics pipeline!");
     }
 
     device.destroyShaderModule(vertShaderModule);
@@ -607,6 +667,10 @@ void VulkanAPI::preRelease()
 {
     if (instance != nullptr)
     {
+        device.destroyPipeline(graphicsPipeline);
+        device.destroyPipelineLayout(pipelineLayout);
+        device.destroyRenderPass(renderPass);
+
         for (const vk::ImageView& imageView : swapChainImageViews)
         {
             device.destroyImageView(imageView);
