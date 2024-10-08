@@ -16,6 +16,7 @@ namespace vk
 	struct Extent2D;
 	struct SurfaceCapabilitiesKHR;
 	class ShaderModule;
+	class CommandBuffer;
 }
 
 struct QueueFamilyIndices;
@@ -40,6 +41,10 @@ private:
 	void createImageViews();
 	void createRenderPass();
 	void createGraphicsPipeline();
+	void createFramebuffers();
+	void createCommandPool();
+	void createCommandBuffer();
+	void recordCommandBuffer(vk::CommandBuffer commandBuffer, uint32_t imageIndex);
 	vk::ShaderModule createShaderModule(const std::vector<char>& code);
 	vk::SurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats);
 	vk::PresentModeKHR chooseSwapPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes);

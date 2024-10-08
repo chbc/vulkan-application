@@ -42,6 +42,9 @@ std::vector<vk::ImageView> swapChainImageViews;
 vk::RenderPass renderPass;
 vk::PipelineLayout pipelineLayout;
 vk::Pipeline graphicsPipeline;
+std::vector<vk::Framebuffer> swapChainFramebuffers;
+vk::CommandPool commandPool;
+vk::CommandBuffer commandBuffer;
 
 const std::vector<const char*> deviceExtensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
 
@@ -99,6 +102,9 @@ void VulkanAPI::init(const SDLAPI& sdlApi)
     createImageViews();
     createRenderPass();
     createGraphicsPipeline();
+    createFramebuffers();
+    createCommandPool();
+    createCommandBuffer();
 }
 
 void VulkanAPI::createInstance()
@@ -484,6 +490,81 @@ void VulkanAPI::createGraphicsPipeline()
     device.destroyShaderModule(fragShaderModule);
 }
 
+void VulkanAPI::createFramebuffers()
+{
+    swapChainFramebuffers.resize(swapChainImageViews.size());
+    for (size_t i = 0; i < swapChainImageViews.size(); i++)
+    {
+        vk::ImageView attachments[] = { swapChainImageViews[i] };
+
+        vk::FramebufferCreateInfo framebufferInfo = vk::FramebufferCreateInfo()
+            .setRenderPass(renderPass)
+            .setAttachmentCount(1)
+            .setPAttachments(attachments)
+            .setWidth(swapChainExtent.width)
+            .setHeight(swapChainExtent.height)
+            .setLayers(1);
+
+        swapChainFramebuffers[i] = device.createFramebuffer(framebufferInfo);
+    }
+}
+
+void VulkanAPI::createCommandPool()
+{
+    QueueFamilyIndices queueFamilyIndices = findQueueFamilies(physicalDevice);
+
+    vk::CommandPoolCreateInfo poolInfo = vk::CommandPoolCreateInfo()
+        .setFlags(vk::CommandPoolCreateFlagBits::eResetCommandBuffer)
+        .setQueueFamilyIndex(queueFamilyIndices.graphicsFamily.value());
+
+    commandPool = device.createCommandPool(poolInfo);
+}
+
+void VulkanAPI::createCommandBuffer()
+{
+    vk::CommandBufferAllocateInfo allocInfo = vk::CommandBufferAllocateInfo()
+        .setCommandPool(commandPool)
+        .setLevel(vk::CommandBufferLevel::ePrimary)
+        .setCommandBufferCount(1);
+}
+
+void VulkanAPI::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint32_t imageIndex)
+{
+    vk::CommandBufferBeginInfo beginInfo = vk::CommandBufferBeginInfo();
+/*      .setFlags(0)
+        .setPInheritanceInfo(nullptr);
+*/
+
+    commandBuffer.begin(beginInfo);
+
+    vk::ClearValue clearColor{ {0.0f, 0.0f, 0.0f, 1.0f} };
+    vk::RenderPassBeginInfo renderPassInfo = vk::RenderPassBeginInfo()
+        .setRenderPass(renderPass)
+        .setFramebuffer(swapChainFramebuffers[imageIndex])
+        .setRenderArea(vk::Rect2D{ {0, 0}, swapChainExtent })
+        .setClearValueCount(1)
+        .setPClearValues(&clearColor);
+
+    commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
+    commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
+
+    vk::Viewport viewport = vk::Viewport()
+        .setX(0.0f).setY(0.0f)
+        .setWidth(static_cast<float>(swapChainExtent.width))
+        .setHeight(static_cast<float>(swapChainExtent.height))
+        .setMinDepth(0.0f)
+        .setMaxDepth(1.0f);
+
+    commandBuffer.setViewport(0, 1, &viewport);
+
+    vk::Rect2D scissor{ {0, 0}, swapChainExtent };
+    commandBuffer.setScissor(0, 1, &scissor);
+
+    commandBuffer.draw(3, 1, 0, 0);
+    commandBuffer.endRenderPass();
+    commandBuffer.end();
+}
+
 vk::ShaderModule VulkanAPI::createShaderModule(const std::vector<char>& code)
 {
     vk::ShaderModuleCreateInfo createInfo = vk::ShaderModuleCreateInfo()
@@ -667,6 +748,13 @@ void VulkanAPI::preRelease()
 {
     if (instance != nullptr)
     {
+        device.destroyCommandPool(commandPool);
+
+        for (vk::Framebuffer& framebuffer : swapChainFramebuffers)
+        {
+            device.destroyFramebuffer(framebuffer);
+        }
+
         device.destroyPipeline(graphicsPipeline);
         device.destroyPipelineLayout(pipelineLayout);
         device.destroyRenderPass(renderPass);
