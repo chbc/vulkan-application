@@ -30,6 +30,7 @@ private:
 
 public:
 	void init(const SDLAPI& sdlApi);
+	void drawFrame();
 
 private:
 	void createInstance();
@@ -45,6 +46,7 @@ private:
 	void createCommandPool();
 	void createCommandBuffer();
 	void recordCommandBuffer(vk::CommandBuffer commandBuffer, uint32_t imageIndex);
+	void createSyncObjects();
 	vk::ShaderModule createShaderModule(const std::vector<char>& code);
 	vk::SurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats);
 	vk::PresentModeKHR chooseSwapPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes);

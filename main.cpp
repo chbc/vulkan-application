@@ -55,6 +55,7 @@ int main()
     while(stillRunning) 
     {
         platform.processInput(stillRunning);
+        platform.drawFrame();
         platform.processFrameEnd();
     }
 

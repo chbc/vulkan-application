@@ -20,6 +20,11 @@ void Platform::processInput(bool& stillRunning)
     sdlApi.processInput(stillRunning);
 }
 
+void Platform::drawFrame()
+{
+    vulkanApi.drawFrame();
+}
+
 void Platform::processFrameEnd()
 {
     sdlApi.processFrameEnd();

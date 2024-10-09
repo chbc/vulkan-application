@@ -12,5 +12,6 @@ public:
 	~Platform();
 	void init();
 	void processInput(bool& stillRunning);
+	void drawFrame();
 	void processFrameEnd();
 };

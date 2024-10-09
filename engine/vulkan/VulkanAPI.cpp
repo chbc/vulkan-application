@@ -45,6 +45,9 @@ vk::Pipeline graphicsPipeline;
 std::vector<vk::Framebuffer> swapChainFramebuffers;
 vk::CommandPool commandPool;
 vk::CommandBuffer commandBuffer;
+vk::Semaphore imageAvailableSemaphore;
+vk::Semaphore renderFinishedSemaphore;
+vk::Fence inFlightFence;
 
 const std::vector<const char*> deviceExtensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
 
@@ -105,6 +108,55 @@ void VulkanAPI::init(const SDLAPI& sdlApi)
     createFramebuffers();
     createCommandPool();
     createCommandBuffer();
+    createSyncObjects();
+}
+
+void VulkanAPI::drawFrame()
+{
+    if (device.waitForFences(1, &inFlightFence, vk::True, UINT64_MAX) != vk::Result::eSuccess)
+    {
+        throw std::runtime_error("drawFrame() - Couldn't wait for fence!");
+    }
+
+    if (device.resetFences(1, &inFlightFence) != vk::Result::eSuccess)
+    {
+        throw std::runtime_error("drawFrame() - Couldn't reset fence!");
+    }
+
+    vk::ResultValue<uint32_t> imageIndex = device.acquireNextImageKHR(swapChain, UINT64_MAX, imageAvailableSemaphore);
+
+    commandBuffer.reset();
+    recordCommandBuffer(commandBuffer, imageIndex.value);
+
+    vk::Semaphore waitSemaphores[] = { imageAvailableSemaphore };
+    vk::Semaphore signalSemaphores[] = { renderFinishedSemaphore };
+    vk::PipelineStageFlags waitStages[] = { vk::PipelineStageFlagBits::eColorAttachmentOutput };
+
+    vk::SubmitInfo submitInfo = vk::SubmitInfo()
+        .setWaitSemaphoreCount(1)
+        .setPWaitSemaphores(waitSemaphores)
+        .setPWaitDstStageMask(waitStages)
+        .setCommandBufferCount(1)
+        .setPCommandBuffers(&commandBuffer)
+        .setSignalSemaphoreCount(1)
+        .setPSignalSemaphores(signalSemaphores);
+
+    if (graphicsQueue.submit(1, &submitInfo, inFlightFence) != vk::Result::eSuccess)
+    {
+        throw std::runtime_error("Failed to submit draw command buffer!");
+    }
+
+    vk::SwapchainKHR swapChains[] = { swapChain };
+
+    vk::PresentInfoKHR presentInfo = vk::PresentInfoKHR()
+        .setWaitSemaphoreCount(1)
+        .setPWaitSemaphores(signalSemaphores)
+        .setSwapchainCount(1)
+        .setPSwapchains(swapChains)
+        .setPImageIndices(&imageIndex.value)
+        .setPResults(nullptr);
+
+    presentQueue.presentKHR(presentInfo);
 }
 
 void VulkanAPI::createInstance()
@@ -359,6 +411,17 @@ void VulkanAPI::createRenderPass()
     {
         throw std::runtime_error("Failed to create render pass!");
     }
+
+    vk::SubpassDependency dependency = vk::SubpassDependency()
+        .setSrcSubpass(VK_SUBPASS_EXTERNAL)
+        .setDstSubpass(0)
+        .setSrcStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput)
+        .setSrcAccessMask(vk::AccessFlagBits::eNone)
+        .setDstStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput)
+        .setDstAccessMask(vk::AccessFlagBits::eColorAttachmentWrite);
+
+    renderPassInfo.setDependencyCount(1);
+    renderPassInfo.setPDependencies(&dependency);
 }
 
 void VulkanAPI::createGraphicsPipeline()
@@ -526,6 +589,15 @@ void VulkanAPI::createCommandBuffer()
         .setCommandPool(commandPool)
         .setLevel(vk::CommandBufferLevel::ePrimary)
         .setCommandBufferCount(1);
+
+    std::vector<vk::CommandBuffer> commandBuffers = device.allocateCommandBuffers(allocInfo);
+    
+    if (commandBuffers.empty())
+    {
+        throw std::runtime_error("Couldn't allocate command buffer!");
+    }
+
+    commandBuffer = commandBuffers.front();
 }
 
 void VulkanAPI::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint32_t imageIndex)
@@ -563,6 +635,17 @@ void VulkanAPI::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint32_t im
     commandBuffer.draw(3, 1, 0, 0);
     commandBuffer.endRenderPass();
     commandBuffer.end();
+}
+
+void VulkanAPI::createSyncObjects()
+{
+    vk::SemaphoreCreateInfo semaphoreInfo;
+    vk::FenceCreateInfo fenceInfo = vk::FenceCreateInfo()
+        .setFlags(vk::FenceCreateFlagBits::eSignaled);
+
+    imageAvailableSemaphore = device.createSemaphore(semaphoreInfo);
+    renderFinishedSemaphore = device.createSemaphore(semaphoreInfo);
+    inFlightFence = device.createFence(fenceInfo);
 }
 
 vk::ShaderModule VulkanAPI::createShaderModule(const std::vector<char>& code)
@@ -748,6 +831,10 @@ void VulkanAPI::preRelease()
 {
     if (instance != nullptr)
     {
+        device.destroySemaphore(imageAvailableSemaphore);
+        device.destroySemaphore(renderFinishedSemaphore);
+        device.destroyFence(inFlightFence);
+
         device.destroyCommandPool(commandPool);
 
         for (vk::Framebuffer& framebuffer : swapChainFramebuffers)
