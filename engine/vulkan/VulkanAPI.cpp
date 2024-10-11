@@ -27,6 +27,9 @@ struct SwapChainSupportDetails
     std::vector<vk::PresentModeKHR> presentModes;
 };
 
+const std::vector<const char*> deviceExtensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
+VkDebugUtilsMessengerEXT debugMessenger;
+
 vk::SurfaceKHR surface = nullptr;
 vk::Instance instance = nullptr;
 vk::PhysicalDevice physicalDevice;
@@ -44,14 +47,13 @@ vk::PipelineLayout pipelineLayout;
 vk::Pipeline graphicsPipeline;
 std::vector<vk::Framebuffer> swapChainFramebuffers;
 vk::CommandPool commandPool;
-vk::CommandBuffer commandBuffer;
-vk::Semaphore imageAvailableSemaphore;
-vk::Semaphore renderFinishedSemaphore;
-vk::Fence inFlightFence;
-
-const std::vector<const char*> deviceExtensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
-
-VkDebugUtilsMessengerEXT debugMessenger;
+std::vector<vk::CommandBuffer> commandBuffers;
+std::vector<vk::Semaphore> imageAvailableSemaphores;
+std::vector<vk::Semaphore> renderFinishedSemaphores;
+std::vector<vk::Fence> inFlightFences;
+const int MAX_FRAMES_IN_FLIGHT = 2;
+uint32_t currentFrame = 0;
+bool framebufferResized = false;
 
 VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger)
 {
@@ -93,43 +95,55 @@ void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& messen
     messengerCreateInfo.pfnUserCallback = debugCallback;
 }
 
-void VulkanAPI::init(const SDLAPI& sdlApi)
+void VulkanAPI::init(SDLAPI& sdlApi)
 {
-    getRequiredExtensions(sdlApi);
+    this->sdlApi = &sdlApi;
+
+    getRequiredExtensions();
     createInstance();
     setupDebugMessenger();
-    createSurface(sdlApi);
+    createSurface();
     pickPhysicalDevice();
     createLogicalDevice();
-    createSwapChain(sdlApi);
+    createSwapChain();
     createImageViews();
     createRenderPass();
     createGraphicsPipeline();
     createFramebuffers();
     createCommandPool();
-    createCommandBuffer();
+    createCommandBuffers();
     createSyncObjects();
 }
 
 void VulkanAPI::drawFrame()
 {
-    if (device.waitForFences(1, &inFlightFence, vk::True, UINT64_MAX) != vk::Result::eSuccess)
+    if (device.waitForFences(1, &inFlightFences[currentFrame], vk::True, UINT64_MAX) != vk::Result::eSuccess)
     {
         throw std::runtime_error("drawFrame() - Couldn't wait for fence!");
     }
 
-    if (device.resetFences(1, &inFlightFence) != vk::Result::eSuccess)
+    vk::ResultValue<uint32_t> imageIndex = device.acquireNextImageKHR(swapChain, UINT64_MAX, imageAvailableSemaphores[currentFrame]);
+
+    if (imageIndex.result == vk::Result::eErrorOutOfDateKHR)
+    {
+        recreateSwapChain();
+        return;
+    }
+    else if ((imageIndex.result != vk::Result::eSuccess) && (imageIndex.result != vk::Result::eSuboptimalKHR))
+    {
+        throw std::runtime_error("Failed to acquire swap chain image!");
+    }
+
+    if (device.resetFences(1, &inFlightFences[currentFrame]) != vk::Result::eSuccess)
     {
         throw std::runtime_error("drawFrame() - Couldn't reset fence!");
     }
 
-    vk::ResultValue<uint32_t> imageIndex = device.acquireNextImageKHR(swapChain, UINT64_MAX, imageAvailableSemaphore);
+    commandBuffers[currentFrame].reset();
+    recordCommandBuffer(commandBuffers[currentFrame], imageIndex.value);
 
-    commandBuffer.reset();
-    recordCommandBuffer(commandBuffer, imageIndex.value);
-
-    vk::Semaphore waitSemaphores[] = { imageAvailableSemaphore };
-    vk::Semaphore signalSemaphores[] = { renderFinishedSemaphore };
+    vk::Semaphore waitSemaphores[] = { imageAvailableSemaphores[currentFrame] };
+    vk::Semaphore signalSemaphores[] = { renderFinishedSemaphores[currentFrame] };
     vk::PipelineStageFlags waitStages[] = { vk::PipelineStageFlagBits::eColorAttachmentOutput };
 
     vk::SubmitInfo submitInfo = vk::SubmitInfo()
@@ -137,11 +151,11 @@ void VulkanAPI::drawFrame()
         .setPWaitSemaphores(waitSemaphores)
         .setPWaitDstStageMask(waitStages)
         .setCommandBufferCount(1)
-        .setPCommandBuffers(&commandBuffer)
+        .setPCommandBuffers(&commandBuffers[currentFrame])
         .setSignalSemaphoreCount(1)
         .setPSignalSemaphores(signalSemaphores);
 
-    if (graphicsQueue.submit(1, &submitInfo, inFlightFence) != vk::Result::eSuccess)
+    if (graphicsQueue.submit(1, &submitInfo, inFlightFences[currentFrame]) != vk::Result::eSuccess)
     {
         throw std::runtime_error("Failed to submit draw command buffer!");
     }
@@ -156,7 +170,19 @@ void VulkanAPI::drawFrame()
         .setPImageIndices(&imageIndex.value)
         .setPResults(nullptr);
 
-    presentQueue.presentKHR(presentInfo);
+    vk::Result result = presentQueue.presentKHR(&presentInfo);
+
+    if ((result == vk::Result::eErrorOutOfDateKHR) || (result != vk::Result::eSuboptimalKHR) || framebufferResized)
+    {
+        framebufferResized = false;
+        recreateSwapChain();
+    }
+    else if (result != vk::Result::eSuccess)
+    {
+        throw std::runtime_error("Failed to present swap chain image!");
+    }
+
+    currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 }
 
 void VulkanAPI::createInstance()
@@ -222,11 +248,11 @@ void VulkanAPI::setupDebugMessenger()
 #endif
 }
 
-void VulkanAPI::createSurface(const SDLAPI& sdlApi)
+void VulkanAPI::createSurface()
 {
     // Create a Vulkan surface for rendering
     VkSurfaceKHR c_surface;
-    if (!SDL_Vulkan_CreateSurface(sdlApi.window, static_cast<VkInstance>(instance), &c_surface))
+    if (!SDL_Vulkan_CreateSurface(sdlApi->window, static_cast<VkInstance>(instance), &c_surface))
     {
         throw std::exception("Could not create a Vulkan surface.");
     }
@@ -278,8 +304,8 @@ void VulkanAPI::createLogicalDevice()
 
     vk::PhysicalDeviceFeatures deviceFeatures{};
     vk::DeviceCreateInfo createInfo = vk::DeviceCreateInfo()
-        .setPQueueCreateInfos(queueCreateInfos.data())
         .setQueueCreateInfoCount(static_cast<uint32_t>(queueCreateInfos.size()))
+        .setPQueueCreateInfos(queueCreateInfos.data())
         .setPEnabledFeatures(&deviceFeatures)
         .setEnabledExtensionCount(static_cast<uint32_t>(deviceExtensions.size()))
         .setPpEnabledExtensionNames(deviceExtensions.data());
@@ -302,13 +328,13 @@ void VulkanAPI::createLogicalDevice()
     presentQueue = device.getQueue(indices.presentFamily.value(), 0);
 }
 
-void VulkanAPI::createSwapChain(const SDLAPI& sdlApi)
+void VulkanAPI::createSwapChain()
 {
     SwapChainSupportDetails swapChainSupport = querySwapChainSupport(physicalDevice);
 
     vk::SurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats);
     vk::PresentModeKHR presentMode = chooseSwapPresentMode(swapChainSupport.presentModes);
-    vk::Extent2D extent = chooseSwapExtent(sdlApi, swapChainSupport.capabilities);
+    vk::Extent2D extent = chooseSwapExtent(swapChainSupport.capabilities);
 
     uint32_t imageCount = swapChainSupport.capabilities.minImageCount + 1;
     if ((swapChainSupport.capabilities.maxImageCount > 0) && (imageCount > swapChainSupport.capabilities.maxImageCount))
@@ -401,17 +427,6 @@ void VulkanAPI::createRenderPass()
         .setColorAttachmentCount(1)
         .setPColorAttachments(&colorAttachmentRef);
 
-    vk::RenderPassCreateInfo renderPassInfo = vk::RenderPassCreateInfo()
-        .setAttachmentCount(1)
-        .setPAttachments(&colorAttachment)
-        .setSubpassCount(1)
-        .setPSubpasses(&subpass);
-
-    if (device.createRenderPass(&renderPassInfo, nullptr, &renderPass) != vk::Result::eSuccess)
-    {
-        throw std::runtime_error("Failed to create render pass!");
-    }
-
     vk::SubpassDependency dependency = vk::SubpassDependency()
         .setSrcSubpass(VK_SUBPASS_EXTERNAL)
         .setDstSubpass(0)
@@ -420,8 +435,18 @@ void VulkanAPI::createRenderPass()
         .setDstStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput)
         .setDstAccessMask(vk::AccessFlagBits::eColorAttachmentWrite);
 
-    renderPassInfo.setDependencyCount(1);
-    renderPassInfo.setPDependencies(&dependency);
+    vk::RenderPassCreateInfo renderPassInfo = vk::RenderPassCreateInfo()
+        .setAttachmentCount(1)
+        .setPAttachments(&colorAttachment)
+        .setSubpassCount(1)
+        .setPSubpasses(&subpass)
+        .setDependencyCount(1)
+        .setPDependencies(&dependency);
+
+    if (device.createRenderPass(&renderPassInfo, nullptr, &renderPass) != vk::Result::eSuccess)
+    {
+        throw std::runtime_error("Failed to create render pass!");
+    }
 }
 
 void VulkanAPI::createGraphicsPipeline()
@@ -452,48 +477,36 @@ void VulkanAPI::createGraphicsPipeline()
 
     vk::PipelineInputAssemblyStateCreateInfo inputAssembly = vk::PipelineInputAssemblyStateCreateInfo()
         .setTopology(vk::PrimitiveTopology::eTriangleList)
-        .setPrimitiveRestartEnable(false);
-
-    vk::Viewport viewport = vk::Viewport()
-        .setX(0.0f).setY(0.0f)
-        .setWidth((float)swapChainExtent.width)
-        .setHeight((float)swapChainExtent.height)
-        .setMinDepth(0.0f).setMaxDepth(1.0f);
-
-    vk::Rect2D scissor = vk::Rect2D()
-        .setOffset(vk::Offset2D{ 0, 0 })
-        .setExtent(swapChainExtent);
+        .setPrimitiveRestartEnable(vk::False);
 
     vk::PipelineViewportStateCreateInfo viewportState = vk::PipelineViewportStateCreateInfo()
         .setViewportCount(1)
-        .setPViewports(&viewport)
-        .setScissorCount(1)
-        .setPScissors(&scissor);
+        .setScissorCount(1);
 
     vk::PipelineRasterizationStateCreateInfo rasterizer = vk::PipelineRasterizationStateCreateInfo()
-        .setDepthClampEnable(false)
-        .setRasterizerDiscardEnable(false)
+        .setDepthClampEnable(vk::False)
+        .setRasterizerDiscardEnable(vk::False)
         .setPolygonMode(vk::PolygonMode::eFill)
         .setLineWidth(1.0f)
         .setCullMode(vk::CullModeFlagBits::eBack)
         .setFrontFace(vk::FrontFace::eClockwise)
-        .setDepthBiasEnable(false)
+        .setDepthBiasEnable(vk::False)
         .setDepthBiasConstantFactor(0.0f)
         .setDepthBiasClamp(0.0f)
         .setDepthBiasSlopeFactor(0.0f);
 
     vk::PipelineMultisampleStateCreateInfo multisampling = vk::PipelineMultisampleStateCreateInfo()
-        .setSampleShadingEnable(false)
+        .setSampleShadingEnable(vk::False)
         .setRasterizationSamples(vk::SampleCountFlagBits::e1)
         .setMinSampleShading(1.0f)
         .setPSampleMask(nullptr)
-        .setAlphaToCoverageEnable(false)
-        .setAlphaToOneEnable(false);
+        .setAlphaToCoverageEnable(vk::False)
+        .setAlphaToOneEnable(vk::False);
 
     vk::PipelineColorBlendAttachmentState colorBlendAttachment = vk::PipelineColorBlendAttachmentState()
         .setColorWriteMask(vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
             vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA)
-        .setBlendEnable(false)
+        .setBlendEnable(vk::False)
         .setSrcColorBlendFactor(vk::BlendFactor::eOne)
         .setDstColorBlendFactor(vk::BlendFactor::eZero)
         .setColorBlendOp(vk::BlendOp::eAdd)
@@ -502,7 +515,7 @@ void VulkanAPI::createGraphicsPipeline()
         .setAlphaBlendOp(vk::BlendOp::eAdd);
 
     vk::PipelineColorBlendStateCreateInfo colorBlending = vk::PipelineColorBlendStateCreateInfo()
-        .setLogicOpEnable(false)
+        .setLogicOpEnable(vk::False)
         .setLogicOp(vk::LogicOp::eCopy)
         .setAttachmentCount(1)
         .setPAttachments(&colorBlendAttachment)
@@ -583,29 +596,26 @@ void VulkanAPI::createCommandPool()
     commandPool = device.createCommandPool(poolInfo);
 }
 
-void VulkanAPI::createCommandBuffer()
+void VulkanAPI::createCommandBuffers()
 {
+    commandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+
     vk::CommandBufferAllocateInfo allocInfo = vk::CommandBufferAllocateInfo()
         .setCommandPool(commandPool)
         .setLevel(vk::CommandBufferLevel::ePrimary)
-        .setCommandBufferCount(1);
+        .setCommandBufferCount(static_cast<uint32_t>(commandBuffers.size()));
 
-    std::vector<vk::CommandBuffer> commandBuffers = device.allocateCommandBuffers(allocInfo);
+    commandBuffers = device.allocateCommandBuffers(allocInfo);
     
     if (commandBuffers.empty())
     {
         throw std::runtime_error("Couldn't allocate command buffer!");
     }
-
-    commandBuffer = commandBuffers.front();
 }
 
 void VulkanAPI::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint32_t imageIndex)
 {
-    vk::CommandBufferBeginInfo beginInfo = vk::CommandBufferBeginInfo();
-/*      .setFlags(0)
-        .setPInheritanceInfo(nullptr);
-*/
+    vk::CommandBufferBeginInfo beginInfo;
 
     commandBuffer.begin(beginInfo);
 
@@ -643,9 +653,16 @@ void VulkanAPI::createSyncObjects()
     vk::FenceCreateInfo fenceInfo = vk::FenceCreateInfo()
         .setFlags(vk::FenceCreateFlagBits::eSignaled);
 
-    imageAvailableSemaphore = device.createSemaphore(semaphoreInfo);
-    renderFinishedSemaphore = device.createSemaphore(semaphoreInfo);
-    inFlightFence = device.createFence(fenceInfo);
+    imageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+    renderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+    inFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
+
+    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+    {
+        imageAvailableSemaphores[i] = device.createSemaphore(semaphoreInfo);
+        renderFinishedSemaphores[i] = device.createSemaphore(semaphoreInfo);
+        inFlightFences[i] = device.createFence(fenceInfo);
+    }
 }
 
 vk::ShaderModule VulkanAPI::createShaderModule(const std::vector<char>& code)
@@ -686,7 +703,7 @@ vk::PresentModeKHR VulkanAPI::chooseSwapPresentMode(const std::vector<vk::Presen
     return vk::PresentModeKHR::eFifo;
 }
 
-vk::Extent2D VulkanAPI::chooseSwapExtent(const SDLAPI& sdlApi, const vk::SurfaceCapabilitiesKHR& capabilities)
+vk::Extent2D VulkanAPI::chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities)
 {
     if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max())
     {
@@ -694,7 +711,7 @@ vk::Extent2D VulkanAPI::chooseSwapExtent(const SDLAPI& sdlApi, const vk::Surface
     }
 
     int width, height;
-    SDL_Vulkan_GetDrawableSize(sdlApi.window, &width, &height);
+    SDL_Vulkan_GetDrawableSize(sdlApi->window, &width, &height);
 
     vk::Extent2D actualExtent = { static_cast<uint32_t>(width), static_cast<uint32_t>(height) };
     actualExtent.width = std::clamp
@@ -761,7 +778,7 @@ QueueFamilyIndices VulkanAPI::findQueueFamilies(const vk::PhysicalDevice& device
             indices.graphicsFamily = i;
         }
 
-        if (device.getSurfaceSupportKHR(i, surface) == VK_SUCCESS)
+        if (device.getSurfaceSupportKHR(i, surface) > 0)
         {
             indices.presentFamily = i;
         }
@@ -775,17 +792,17 @@ QueueFamilyIndices VulkanAPI::findQueueFamilies(const vk::PhysicalDevice& device
     return indices;
 }
 
-void VulkanAPI::getRequiredExtensions(const SDLAPI& sdlApi)
+void VulkanAPI::getRequiredExtensions()
 {
     unsigned extension_count;
     // Get WSI extensions from SDL (we can add more if we like - we just can't remove these)
-    if (!SDL_Vulkan_GetInstanceExtensions(sdlApi.window, &extension_count, NULL))
+    if (!SDL_Vulkan_GetInstanceExtensions(sdlApi->window, &extension_count, NULL))
     {
         throw std::exception("Could not get the number of required instance extensions from SDL.");
     }
 
     extensions.resize(extension_count);
-    if (!SDL_Vulkan_GetInstanceExtensions(sdlApi.window, &extension_count, extensions.data()))
+    if (!SDL_Vulkan_GetInstanceExtensions(sdlApi->window, &extension_count, extensions.data()))
     {
         throw std::exception("Could not get the names of required instance extensions from SDL.");
     }
@@ -827,31 +844,51 @@ bool VulkanAPI::checkValidationLayerSupport()
     return result;
 }
 
+void VulkanAPI::cleanupSwapChain()
+{
+    for (vk::Framebuffer& framebuffer : swapChainFramebuffers)
+    {
+        device.destroyFramebuffer(framebuffer);
+    }
+
+    for (const vk::ImageView& imageView : swapChainImageViews)
+    {
+        device.destroyImageView(imageView);
+    }
+
+    device.destroySwapchainKHR(swapChain);
+}
+
+void VulkanAPI::recreateSwapChain()
+{
+    device.waitIdle();
+
+    cleanupSwapChain();
+
+    createSwapChain();
+    createImageViews();
+    createFramebuffers();
+}
+
 void VulkanAPI::preRelease()
 {
     if (instance != nullptr)
     {
-        device.destroySemaphore(imageAvailableSemaphore);
-        device.destroySemaphore(renderFinishedSemaphore);
-        device.destroyFence(inFlightFence);
-
-        device.destroyCommandPool(commandPool);
-
-        for (vk::Framebuffer& framebuffer : swapChainFramebuffers)
-        {
-            device.destroyFramebuffer(framebuffer);
-        }
+        device.waitIdle();
+        cleanupSwapChain();
 
         device.destroyPipeline(graphicsPipeline);
         device.destroyPipelineLayout(pipelineLayout);
         device.destroyRenderPass(renderPass);
 
-        for (const vk::ImageView& imageView : swapChainImageViews)
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
         {
-            device.destroyImageView(imageView);
+            device.destroySemaphore(renderFinishedSemaphores[i]);
+            device.destroySemaphore(imageAvailableSemaphores[i]);
+            device.destroyFence(inFlightFences[i]);
         }
 
-        device.destroySwapchainKHR(swapChain);
+        device.destroyCommandPool(commandPool);
         device.destroy();
 #if defined(_DEBUG)
         DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
