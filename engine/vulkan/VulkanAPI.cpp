@@ -8,6 +8,8 @@
 #include <iostream>
 #include <optional>
 #include <set>
+#include <array>
+#include <glm/glm.hpp>
 
 struct QueueFamilyIndices
 {
@@ -25,6 +27,48 @@ struct SwapChainSupportDetails
     vk::SurfaceCapabilitiesKHR capabilities;
     std::vector<vk::SurfaceFormatKHR> formats;
     std::vector<vk::PresentModeKHR> presentModes;
+};
+
+struct Vertex
+{
+    glm::vec2 pos;
+    glm::vec3 color;
+
+    static vk::VertexInputBindingDescription getBindingDescription()
+    {
+        vk::VertexInputBindingDescription bindingDescription = vk::VertexInputBindingDescription()
+            .setBinding(0)
+            .setStride(sizeof(Vertex))
+            .setInputRate(vk::VertexInputRate::eVertex);
+
+        return bindingDescription;
+    }
+
+    static std::array<vk::VertexInputAttributeDescription, 2> getAttributeDescriptions()
+    {
+        std::array<vk::VertexInputAttributeDescription, 2> attributeDescriptions;
+
+        attributeDescriptions[0] = vk::VertexInputAttributeDescription()
+            .setBinding(0)
+            .setLocation(0)
+            .setFormat(vk::Format::eR32G32Sfloat)
+            .setOffset(offsetof(Vertex, pos));
+
+        attributeDescriptions[1] = vk::VertexInputAttributeDescription()
+            .setBinding(1)
+            .setLocation(1)
+            .setFormat(vk::Format::eR32G32B32Sfloat)
+            .setOffset(offsetof(Vertex, color));
+
+        return attributeDescriptions;
+    }
+};
+
+const std::vector<Vertex> vertices =
+{
+    {{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+    {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
+    {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}
 };
 
 const std::vector<const char*> deviceExtensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
@@ -469,11 +513,14 @@ void VulkanAPI::createGraphicsPipeline()
 
     vk::PipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
 
+    auto bindingDescription = Vertex::getBindingDescription();
+    auto attributeDescriptions = Vertex::getAttributeDescriptions();
+
     vk::PipelineVertexInputStateCreateInfo vertexInputInfo = vk::PipelineVertexInputStateCreateInfo()
-        .setVertexBindingDescriptionCount(0)
-        .setPVertexBindingDescriptions(nullptr)
-        .setVertexAttributeDescriptionCount(0)
-        .setPVertexAttributeDescriptions(nullptr);
+        .setVertexBindingDescriptionCount(1)
+        .setVertexAttributeDescriptionCount(static_cast<uint32_t>(attributeDescriptions.size()))
+        .setPVertexBindingDescriptions(&bindingDescription)
+        .setPVertexAttributeDescriptions(attributeDescriptions.data());
 
     vk::PipelineInputAssemblyStateCreateInfo inputAssembly = vk::PipelineInputAssemblyStateCreateInfo()
         .setTopology(vk::PrimitiveTopology::eTriangleList)
