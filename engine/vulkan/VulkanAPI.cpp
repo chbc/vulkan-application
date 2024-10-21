@@ -98,6 +98,8 @@ std::vector<vk::Fence> inFlightFences;
 const int MAX_FRAMES_IN_FLIGHT = 2;
 uint32_t currentFrame = 0;
 bool framebufferResized = false;
+vk::Buffer vertexBuffer;
+vk::DeviceMemory vertexBufferMemory;
 
 VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger)
 {
@@ -137,6 +139,21 @@ void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& messen
     messengerCreateInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
     messengerCreateInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
     messengerCreateInfo.pfnUserCallback = debugCallback;
+}
+
+uint32_t findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties)
+{
+    vk::PhysicalDeviceMemoryProperties memProperties = physicalDevice.getMemoryProperties();
+
+    for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++)
+    {
+        if ((typeFilter & (1 << i)) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties)
+        {
+            return i;
+        }
+    }
+
+    throw std::runtime_error("Failed to find suitable memory type!");
 }
 
 void VulkanAPI::init(SDLAPI& sdlApi)
@@ -643,6 +660,36 @@ void VulkanAPI::createCommandPool()
     commandPool = device.createCommandPool(poolInfo);
 }
 
+void VulkanAPI::createVertexBuffer()
+{
+    vk::BufferCreateInfo bufferInfo = vk::BufferCreateInfo()
+        .setSize(sizeof(vertices[0]) * vertices.size())
+        .setUsage(vk::BufferUsageFlagBits::eVertexBuffer)
+        .setSharingMode(vk::SharingMode::eExclusive);
+
+    vertexBuffer = device.createBuffer(bufferInfo);
+
+    vk::MemoryRequirements memRequirements = device.getBufferMemoryRequirements(vertexBuffer);
+
+    vk::MemoryAllocateInfo allocInfo = vk::MemoryAllocateInfo()
+        .setAllocationSize(memRequirements.size)
+        .setMemoryTypeIndex
+        (
+            findMemoryType
+            (
+                memRequirements.memoryTypeBits,
+                vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
+            )
+        );
+
+    vertexBufferMemory = device.allocateMemory(allocInfo);
+    device.bindBufferMemory(vertexBuffer, vertexBufferMemory, 0);
+
+    void* data = device.mapMemory(vertexBufferMemory, 0, bufferInfo.size);
+    memcpy(data, vertices.data(), (size_t)bufferInfo.size);
+    device.unmapMemory(vertexBufferMemory);
+}
+
 void VulkanAPI::createCommandBuffers()
 {
     commandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
@@ -689,7 +736,11 @@ void VulkanAPI::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint32_t im
     vk::Rect2D scissor{ {0, 0}, swapChainExtent };
     commandBuffer.setScissor(0, 1, &scissor);
 
-    commandBuffer.draw(3, 1, 0, 0);
+    vk::Buffer vertexBuffers[] = { vertexBuffer };
+    vk::DeviceSize offsets[] = { 0 };
+    commandBuffer.bindVertexBuffers(0, vertexBuffers, offsets);
+
+    commandBuffer.draw(static_cast<uint32_t>(vertices.size()), 1, 0, 0);
     commandBuffer.endRenderPass();
     commandBuffer.end();
 }
@@ -924,6 +975,8 @@ void VulkanAPI::preRelease()
         device.waitIdle();
         cleanupSwapChain();
 
+        device.destroyBuffer(vertexBuffer);
+        device.freeMemory(vertexBufferMemory);
         device.destroyPipeline(graphicsPipeline);
         device.destroyPipelineLayout(pipelineLayout);
         device.destroyRenderPass(renderPass);

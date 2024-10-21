@@ -45,6 +45,7 @@ private:
 	void createGraphicsPipeline();
 	void createFramebuffers();
 	void createCommandPool();
+	void createVertexBuffer();
 	void createCommandBuffers();
 	void recordCommandBuffer(vk::CommandBuffer commandBuffer, uint32_t imageIndex);
 	void createSyncObjects();
