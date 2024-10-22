@@ -48,14 +48,14 @@ struct Vertex
     {
         std::array<vk::VertexInputAttributeDescription, 2> attributeDescriptions;
 
-        attributeDescriptions[0] = vk::VertexInputAttributeDescription()
+        attributeDescriptions[0]
             .setBinding(0)
             .setLocation(0)
             .setFormat(vk::Format::eR32G32Sfloat)
             .setOffset(offsetof(Vertex, pos));
 
-        attributeDescriptions[1] = vk::VertexInputAttributeDescription()
-            .setBinding(1)
+        attributeDescriptions[1]
+            .setBinding(0)
             .setLocation(1)
             .setFormat(vk::Format::eR32G32B32Sfloat)
             .setOffset(offsetof(Vertex, color));
@@ -172,6 +172,7 @@ void VulkanAPI::init(SDLAPI& sdlApi)
     createGraphicsPipeline();
     createFramebuffers();
     createCommandPool();
+    createVertexBuffer();
     createCommandBuffers();
     createSyncObjects();
 }
