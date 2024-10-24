@@ -156,6 +156,61 @@ uint32_t findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties)
     throw std::runtime_error("Failed to find suitable memory type!");
 }
 
+void createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties,
+    vk::Buffer& buffer, vk::DeviceMemory& bufferMemory)
+{
+    vk::BufferCreateInfo bufferInfo = vk::BufferCreateInfo()
+        .setSize(size)
+        .setUsage(usage)
+        .setSharingMode(vk::SharingMode::eExclusive);
+
+    buffer = device.createBuffer(bufferInfo);
+
+    vk::MemoryRequirements memRequirements = device.getBufferMemoryRequirements(buffer);
+
+    vk::MemoryAllocateInfo allocInfo = vk::MemoryAllocateInfo()
+        .setAllocationSize(memRequirements.size)
+        .setMemoryTypeIndex(findMemoryType(memRequirements.memoryTypeBits, properties));
+
+    bufferMemory = device.allocateMemory(allocInfo);
+    device.bindBufferMemory(buffer, bufferMemory, 0);
+}
+
+void copyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer, vk::DeviceSize size)
+{
+    vk::CommandBufferAllocateInfo allocInfo = vk::CommandBufferAllocateInfo()
+        .setLevel(vk::CommandBufferLevel::ePrimary)
+        .setCommandPool(commandPool)
+        .setCommandBufferCount(1);
+
+    vk::CommandBuffer commandBuffer;
+    if (device.allocateCommandBuffers(&allocInfo, &commandBuffer) != vk::Result::eSuccess)
+    {
+        throw std::runtime_error("Failed to allocate command buffer!");
+    }
+
+    vk::CommandBufferBeginInfo beginInfo = vk::CommandBufferBeginInfo()
+        .setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
+
+    commandBuffer.begin(beginInfo);
+
+    vk::BufferCopy copyRegion = vk::BufferCopy()
+        .setSrcOffset(0).setDstOffset(0)
+        .setSize(size);
+
+    commandBuffer.copyBuffer(srcBuffer, dstBuffer, 1, &copyRegion);
+    commandBuffer.end();
+
+    vk::SubmitInfo submitInfo = vk::SubmitInfo()
+        .setCommandBufferCount(1)
+        .setPCommandBuffers(&commandBuffer);
+
+    graphicsQueue.submit(submitInfo);
+    graphicsQueue.waitIdle();
+
+    device.freeCommandBuffers(commandPool, commandBuffer);
+}
+
 void VulkanAPI::init(SDLAPI& sdlApi)
 {
     this->sdlApi = &sdlApi;
@@ -663,32 +718,24 @@ void VulkanAPI::createCommandPool()
 
 void VulkanAPI::createVertexBuffer()
 {
-    vk::BufferCreateInfo bufferInfo = vk::BufferCreateInfo()
-        .setSize(sizeof(vertices[0]) * vertices.size())
-        .setUsage(vk::BufferUsageFlagBits::eVertexBuffer)
-        .setSharingMode(vk::SharingMode::eExclusive);
+    vk::DeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
 
-    vertexBuffer = device.createBuffer(bufferInfo);
+    vk::Buffer stagingBuffer;
+    vk::DeviceMemory stagingBufferMemory;
+    createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferSrc,
+        vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, stagingBuffer, stagingBufferMemory);
 
-    vk::MemoryRequirements memRequirements = device.getBufferMemoryRequirements(vertexBuffer);
+    void* data = device.mapMemory(stagingBufferMemory, 0, bufferSize);
+    memcpy(data, vertices.data(), (size_t)bufferSize);
+    device.unmapMemory(stagingBufferMemory);
 
-    vk::MemoryAllocateInfo allocInfo = vk::MemoryAllocateInfo()
-        .setAllocationSize(memRequirements.size)
-        .setMemoryTypeIndex
-        (
-            findMemoryType
-            (
-                memRequirements.memoryTypeBits,
-                vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
-            )
-        );
+    createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer,
+        vk::MemoryPropertyFlagBits::eDeviceLocal, vertexBuffer, vertexBufferMemory);
 
-    vertexBufferMemory = device.allocateMemory(allocInfo);
-    device.bindBufferMemory(vertexBuffer, vertexBufferMemory, 0);
+    copyBuffer(stagingBuffer, vertexBuffer, bufferSize);
 
-    void* data = device.mapMemory(vertexBufferMemory, 0, bufferInfo.size);
-    memcpy(data, vertices.data(), (size_t)bufferInfo.size);
-    device.unmapMemory(vertexBufferMemory);
+    device.destroyBuffer(stagingBuffer);
+    device.freeMemory(stagingBufferMemory);
 }
 
 void VulkanAPI::createCommandBuffers()
