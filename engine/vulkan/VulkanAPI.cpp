@@ -9,7 +9,12 @@
 #include <optional>
 #include <set>
 #include <array>
+
+#define GLM_FORMCE_RADIANS
 #include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+
+#include <chrono>
 
 struct QueueFamilyIndices
 {
@@ -64,6 +69,13 @@ struct Vertex
     }
 };
 
+struct UniformBufferObject
+{
+    glm::mat4 model;
+    glm::mat4 view;
+    glm::mat4 proj;
+};
+
 const std::vector<Vertex> vertices =
 {
     {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
@@ -90,6 +102,7 @@ vk::Format swapChainImageFormat;
 vk::Extent2D swapChainExtent;
 std::vector<vk::ImageView> swapChainImageViews;
 vk::RenderPass renderPass;
+vk::DescriptorSetLayout descriptorSetLayout;
 vk::PipelineLayout pipelineLayout;
 vk::Pipeline graphicsPipeline;
 std::vector<vk::Framebuffer> swapChainFramebuffers;
@@ -105,6 +118,10 @@ vk::Buffer vertexBuffer;
 vk::DeviceMemory vertexBufferMemory;
 vk::Buffer indexBuffer;
 vk::DeviceMemory indexBufferMemory;
+
+std::vector<vk::Buffer> uniformBuffers;
+std::vector<vk::DeviceMemory> uniformBuffersMemory;
+std::vector<void*> uniformBuffersMapped;
 
 VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger)
 {
@@ -229,11 +246,13 @@ void VulkanAPI::init(SDLAPI& sdlApi)
     createSwapChain();
     createImageViews();
     createRenderPass();
+    createDescriptorSetLayout();
     createGraphicsPipeline();
     createFramebuffers();
     createCommandPool();
     createVertexBuffer();
     createIndexBuffer();
+    createUniformBuffers();
     createCommandBuffers();
     createSyncObjects();
 }
@@ -261,6 +280,8 @@ void VulkanAPI::drawFrame()
     {
         throw std::runtime_error("drawFrame() - Couldn't reset fence!");
     }
+
+    updateUniformBuffer(currentFrame);
 
     commandBuffers[currentFrame].reset();
     recordCommandBuffer(commandBuffers[currentFrame], imageIndex.value);
@@ -654,8 +675,8 @@ void VulkanAPI::createGraphicsPipeline()
         .setPDynamicStates(dynamicStates.data());
 
     vk::PipelineLayoutCreateInfo pipelineLayoutInfo = vk::PipelineLayoutCreateInfo()
-        .setSetLayoutCount(0)
-        .setPSetLayouts(nullptr)
+        .setSetLayoutCount(1)
+        .setPSetLayouts(&descriptorSetLayout)
         .setPushConstantRangeCount(0)
         .setPPushConstantRanges(nullptr);
 
@@ -765,6 +786,23 @@ void VulkanAPI::createIndexBuffer()
     device.freeMemory(stagingBufferMemory);
 }
 
+void VulkanAPI::createUniformBuffers()
+{
+    vk::DeviceSize bufferSize = sizeof(UniformBufferObject);
+
+    uniformBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+    uniformBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT);
+    uniformBuffersMapped.resize(MAX_FRAMES_IN_FLIGHT);
+
+    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+    {
+        createBuffer(bufferSize, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible |
+            vk::MemoryPropertyFlagBits::eHostCoherent, uniformBuffers[i], uniformBuffersMemory[i]);
+
+        uniformBuffersMapped[i] = device.mapMemory(uniformBuffersMemory[i], 0, bufferSize);
+    }
+}
+
 void VulkanAPI::createCommandBuffers()
 {
     commandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
@@ -837,6 +875,38 @@ void VulkanAPI::createSyncObjects()
         renderFinishedSemaphores[i] = device.createSemaphore(semaphoreInfo);
         inFlightFences[i] = device.createFence(fenceInfo);
     }
+}
+
+void VulkanAPI::createDescriptorSetLayout()
+{
+    vk::DescriptorSetLayoutBinding uboLayoutBinding;
+    uboLayoutBinding.setBinding(0);
+    uboLayoutBinding.setDescriptorType(vk::DescriptorType::eUniformBuffer);
+    uboLayoutBinding.setDescriptorCount(1);
+    uboLayoutBinding.setStageFlags(vk::ShaderStageFlagBits::eVertex);
+    uboLayoutBinding.setPImmutableSamplers(nullptr);
+
+    vk::DescriptorSetLayoutCreateInfo layoutInfo = vk::DescriptorSetLayoutCreateInfo()
+        .setBindingCount(1)
+        .setPBindings(&uboLayoutBinding);
+    
+    descriptorSetLayout = device.createDescriptorSetLayout(layoutInfo);
+}
+
+void VulkanAPI::updateUniformBuffer(uint32_t currentImage)
+{
+    static auto startTime = std::chrono::high_resolution_clock::now();
+
+    auto currentTime = std::chrono::high_resolution_clock::now();
+    float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
+
+    UniformBufferObject ubo;
+    ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+    ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+    ubo.proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / (float)swapChainExtent.height, 0.1f, 10.0f);
+    ubo.proj[1][1] *= -1.0f;
+
+    memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
 }
 
 vk::ShaderModule VulkanAPI::createShaderModule(const std::vector<char>& code)
@@ -1051,6 +1121,13 @@ void VulkanAPI::preRelease()
         device.waitIdle();
         cleanupSwapChain();
 
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+        {
+            device.destroyBuffer(uniformBuffers[i]);
+            device.freeMemory(uniformBuffersMemory[i]);
+        }
+
+        device.destroyDescriptorSetLayout(descriptorSetLayout);
         device.destroyBuffer(indexBuffer);
         device.freeMemory(indexBufferMemory);
         device.destroyBuffer(vertexBuffer);

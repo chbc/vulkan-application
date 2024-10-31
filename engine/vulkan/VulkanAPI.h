@@ -47,9 +47,12 @@ private:
 	void createCommandPool();
 	void createVertexBuffer();
 	void createIndexBuffer();
+	void createUniformBuffers();
 	void createCommandBuffers();
 	void recordCommandBuffer(vk::CommandBuffer commandBuffer, uint32_t imageIndex);
 	void createSyncObjects();
+	void createDescriptorSetLayout();
+	void updateUniformBuffer(uint32_t currentImage);
 	vk::ShaderModule createShaderModule(const std::vector<char>& code);
 	vk::SurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats);
 	vk::PresentModeKHR chooseSwapPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes);
