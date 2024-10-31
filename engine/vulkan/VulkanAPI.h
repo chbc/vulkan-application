@@ -48,6 +48,8 @@ private:
 	void createVertexBuffer();
 	void createIndexBuffer();
 	void createUniformBuffers();
+	void createDescriptorPool();
+	void createDescriptorSets();
 	void createCommandBuffers();
 	void recordCommandBuffer(vk::CommandBuffer commandBuffer, uint32_t imageIndex);
 	void createSyncObjects();

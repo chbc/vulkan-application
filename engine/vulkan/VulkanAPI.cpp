@@ -123,6 +123,9 @@ std::vector<vk::Buffer> uniformBuffers;
 std::vector<vk::DeviceMemory> uniformBuffersMemory;
 std::vector<void*> uniformBuffersMapped;
 
+vk::DescriptorPool descriptorPool;
+std::vector<vk::DescriptorSet> descriptorSets;
+
 VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger)
 {
     auto func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
@@ -253,6 +256,8 @@ void VulkanAPI::init(SDLAPI& sdlApi)
     createVertexBuffer();
     createIndexBuffer();
     createUniformBuffers();
+    createDescriptorPool();
+    createDescriptorSets();
     createCommandBuffers();
     createSyncObjects();
 }
@@ -636,7 +641,7 @@ void VulkanAPI::createGraphicsPipeline()
         .setPolygonMode(vk::PolygonMode::eFill)
         .setLineWidth(1.0f)
         .setCullMode(vk::CullModeFlagBits::eBack)
-        .setFrontFace(vk::FrontFace::eClockwise)
+        .setFrontFace(vk::FrontFace::eCounterClockwise)
         .setDepthBiasEnable(vk::False)
         .setDepthBiasConstantFactor(0.0f)
         .setDepthBiasClamp(0.0f)
@@ -803,6 +808,50 @@ void VulkanAPI::createUniformBuffers()
     }
 }
 
+void VulkanAPI::createDescriptorPool()
+{
+    vk::DescriptorPoolSize poolSize = vk::DescriptorPoolSize()
+        .setDescriptorCount(static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT));
+
+    vk::DescriptorPoolCreateInfo poolInfo = vk::DescriptorPoolCreateInfo()
+        .setPoolSizeCount(1)
+        .setPPoolSizes(&poolSize)
+        .setMaxSets(static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT));
+
+    descriptorPool = device.createDescriptorPool(poolInfo);
+}
+
+void VulkanAPI::createDescriptorSets()
+{
+    vk::DescriptorSetLayout layouts[MAX_FRAMES_IN_FLIGHT] = { descriptorSetLayout, descriptorSetLayout };
+    vk::DescriptorSetAllocateInfo allocInfo = vk::DescriptorSetAllocateInfo()
+        .setDescriptorPool(descriptorPool)
+        .setDescriptorSetCount(static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT))
+        .setPSetLayouts(layouts);
+
+    descriptorSets = device.allocateDescriptorSets(allocInfo);
+
+    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+    {
+        vk::DescriptorBufferInfo bufferInfo = vk::DescriptorBufferInfo()
+            .setBuffer(uniformBuffers[i])
+            .setOffset(0)
+            .setRange(sizeof(UniformBufferObject));
+
+        vk::WriteDescriptorSet descriptorWrite = vk::WriteDescriptorSet()
+            .setDstSet(descriptorSets[i])
+            .setDstBinding(0)
+            .setDstArrayElement(0)
+            .setDescriptorType(vk::DescriptorType::eUniformBuffer)
+            .setDescriptorCount(1)
+            .setPBufferInfo(&bufferInfo)
+            .setPImageInfo(nullptr)
+            .setPTexelBufferView(nullptr);
+
+        device.updateDescriptorSets(1, &descriptorWrite, 0, nullptr);
+    }
+}
+
 void VulkanAPI::createCommandBuffers()
 {
     commandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
@@ -854,6 +903,7 @@ void VulkanAPI::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint32_t im
     commandBuffer.bindVertexBuffers(0, vertexBuffers, offsets);
     commandBuffer.bindIndexBuffer(indexBuffer, 0, vk::IndexType::eUint16);
 
+    commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0, 1, &descriptorSets[currentFrame], 0, nullptr);
     commandBuffer.drawIndexed(static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
     commandBuffer.endRenderPass();
     commandBuffer.end();
@@ -1127,6 +1177,7 @@ void VulkanAPI::preRelease()
             device.freeMemory(uniformBuffersMemory[i]);
         }
 
+        device.destroyDescriptorPool(descriptorPool);
         device.destroyDescriptorSetLayout(descriptorSetLayout);
         device.destroyBuffer(indexBuffer);
         device.freeMemory(indexBufferMemory);
