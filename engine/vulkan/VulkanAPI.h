@@ -48,12 +48,12 @@ private:
 	void createVertexBuffer();
 	void createIndexBuffer();
 	void createUniformBuffers();
+	void createDescriptorSetLayout();
 	void createDescriptorPool();
 	void createDescriptorSets();
 	void createCommandBuffers();
 	void recordCommandBuffer(vk::CommandBuffer commandBuffer, uint32_t imageIndex);
 	void createSyncObjects();
-	void createDescriptorSetLayout();
 	void updateUniformBuffer(uint32_t currentImage);
 	vk::ShaderModule createShaderModule(const std::vector<char>& code);
 	vk::SurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats);

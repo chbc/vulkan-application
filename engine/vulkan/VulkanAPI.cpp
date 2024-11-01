@@ -124,7 +124,7 @@ std::vector<vk::DeviceMemory> uniformBuffersMemory;
 std::vector<void*> uniformBuffersMapped;
 
 vk::DescriptorPool descriptorPool;
-std::vector<vk::DescriptorSet> descriptorSets;
+vk::DescriptorSet descriptorSet;
 
 VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger)
 {
@@ -808,47 +808,30 @@ void VulkanAPI::createUniformBuffers()
     }
 }
 
+void VulkanAPI::createDescriptorSetLayout()
+{
+    vk::DescriptorSetLayoutBinding uboLayoutBinding{ 0, vk::DescriptorType::eUniformBuffer, 1, vk::ShaderStageFlagBits::eVertex };
+    vk::DescriptorSetLayoutCreateInfo createInfo{ {}, uboLayoutBinding };
+    descriptorSetLayout = device.createDescriptorSetLayout(createInfo);
+}
+
 void VulkanAPI::createDescriptorPool()
 {
-    vk::DescriptorPoolSize poolSize = vk::DescriptorPoolSize()
-        .setDescriptorCount(static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT));
-
-    vk::DescriptorPoolCreateInfo poolInfo = vk::DescriptorPoolCreateInfo()
-        .setPoolSizeCount(1)
-        .setPPoolSizes(&poolSize)
-        .setMaxSets(static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT));
-
-    descriptorPool = device.createDescriptorPool(poolInfo);
+    vk::DescriptorPoolSize poolSize{ vk::DescriptorType::eUniformBuffer, 1 };
+    vk::DescriptorPoolCreateInfo createInfo{ vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet, 1, poolSize };
+    descriptorPool = device.createDescriptorPool(createInfo);
 }
 
 void VulkanAPI::createDescriptorSets()
 {
-    vk::DescriptorSetLayout layouts[MAX_FRAMES_IN_FLIGHT] = { descriptorSetLayout, descriptorSetLayout };
-    vk::DescriptorSetAllocateInfo allocInfo = vk::DescriptorSetAllocateInfo()
-        .setDescriptorPool(descriptorPool)
-        .setDescriptorSetCount(static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT))
-        .setPSetLayouts(layouts);
-
-    descriptorSets = device.allocateDescriptorSets(allocInfo);
+    vk::DescriptorSetAllocateInfo descriptorSetAllocateInfo{ descriptorPool, descriptorSetLayout };
+    descriptorSet = device.allocateDescriptorSets(descriptorSetAllocateInfo).front();
 
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
     {
-        vk::DescriptorBufferInfo bufferInfo = vk::DescriptorBufferInfo()
-            .setBuffer(uniformBuffers[i])
-            .setOffset(0)
-            .setRange(sizeof(UniformBufferObject));
-
-        vk::WriteDescriptorSet descriptorWrite = vk::WriteDescriptorSet()
-            .setDstSet(descriptorSets[i])
-            .setDstBinding(0)
-            .setDstArrayElement(0)
-            .setDescriptorType(vk::DescriptorType::eUniformBuffer)
-            .setDescriptorCount(1)
-            .setPBufferInfo(&bufferInfo)
-            .setPImageInfo(nullptr)
-            .setPTexelBufferView(nullptr);
-
-        device.updateDescriptorSets(1, &descriptorWrite, 0, nullptr);
+        vk::DescriptorBufferInfo descriptorBufferInfo{ uniformBuffers[i], 0, sizeof(UniformBufferObject) };
+        vk::WriteDescriptorSet writeDescriptorSet{ descriptorSet, 0, 0, vk::DescriptorType::eUniformBuffer, {}, descriptorBufferInfo };
+        device.updateDescriptorSets(writeDescriptorSet, nullptr);
     }
 }
 
@@ -903,7 +886,7 @@ void VulkanAPI::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint32_t im
     commandBuffer.bindVertexBuffers(0, vertexBuffers, offsets);
     commandBuffer.bindIndexBuffer(indexBuffer, 0, vk::IndexType::eUint16);
 
-    commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0, 1, &descriptorSets[currentFrame], 0, nullptr);
+    commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
     commandBuffer.drawIndexed(static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
     commandBuffer.endRenderPass();
     commandBuffer.end();
@@ -925,22 +908,6 @@ void VulkanAPI::createSyncObjects()
         renderFinishedSemaphores[i] = device.createSemaphore(semaphoreInfo);
         inFlightFences[i] = device.createFence(fenceInfo);
     }
-}
-
-void VulkanAPI::createDescriptorSetLayout()
-{
-    vk::DescriptorSetLayoutBinding uboLayoutBinding;
-    uboLayoutBinding.setBinding(0);
-    uboLayoutBinding.setDescriptorType(vk::DescriptorType::eUniformBuffer);
-    uboLayoutBinding.setDescriptorCount(1);
-    uboLayoutBinding.setStageFlags(vk::ShaderStageFlagBits::eVertex);
-    uboLayoutBinding.setPImmutableSamplers(nullptr);
-
-    vk::DescriptorSetLayoutCreateInfo layoutInfo = vk::DescriptorSetLayoutCreateInfo()
-        .setBindingCount(1)
-        .setPBindings(&uboLayoutBinding);
-    
-    descriptorSetLayout = device.createDescriptorSetLayout(layoutInfo);
 }
 
 void VulkanAPI::updateUniformBuffer(uint32_t currentImage)
