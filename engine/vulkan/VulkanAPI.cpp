@@ -87,7 +87,7 @@ const std::vector<Vertex> vertices =
 const std::vector<uint16_t> indices = { 0, 1, 2, 2, 3, 0 };
 
 const std::vector<const char*> deviceExtensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
-VkDebugUtilsMessengerEXT debugMessenger;
+
 
 vk::SurfaceKHR surface = nullptr;
 vk::Instance instance = nullptr;
@@ -125,46 +125,6 @@ std::vector<void*> uniformBuffersMapped;
 
 vk::DescriptorPool descriptorPool;
 vk::DescriptorSet descriptorSet;
-
-VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger)
-{
-    auto func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
-    if (func != nullptr)
-    {
-        return func(instance, pCreateInfo, pAllocator, pDebugMessenger);
-    }
-
-    return VK_ERROR_EXTENSION_NOT_PRESENT;
-}
-
-void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks* pAllocator)
-{
-    auto func = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
-    if (func != nullptr)
-    {
-        func(instance, debugMessenger, pAllocator);
-    }
-}
-
-VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
-    VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-    VkDebugUtilsMessageTypeFlagsEXT messageType,
-    const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
-    void* pUserData)
-{
-    std::cerr << "validation layer: " << pCallbackData->pMessage << std::endl;
-
-    return VK_FALSE;
-}
-
-void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& messengerCreateInfo)
-{
-    messengerCreateInfo = {};
-    messengerCreateInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-    messengerCreateInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
-    messengerCreateInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
-    messengerCreateInfo.pfnUserCallback = debugCallback;
-}
 
 uint32_t findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties)
 {
@@ -363,12 +323,9 @@ void VulkanAPI::createInstance()
         .setEnabledLayerCount(static_cast<uint32_t>(validationLayers.size()))
         .setPpEnabledLayerNames(validationLayers.data());
 
-#if defined(_DEBUG)
     VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo;
-    populateDebugMessengerCreateInfo(debugCreateInfo);
-
+    debugMessenger.populateDebugMessengerCreateInfo(debugCreateInfo);
     createInfo.setPNext((VkDebugUtilsMessengerCreateInfoEXT*)&debugCreateInfo);
-#endif
 
     // Create the Vulkan instance.
     try
@@ -386,15 +343,10 @@ void VulkanAPI::createInstance()
 
 void VulkanAPI::setupDebugMessenger()
 {
-#if defined(_DEBUG)
-    VkDebugUtilsMessengerCreateInfoEXT messengerCreateInfo;
-    populateDebugMessengerCreateInfo(messengerCreateInfo);
-
-    if (CreateDebugUtilsMessengerEXT(instance, &messengerCreateInfo, nullptr, &debugMessenger) != VK_SUCCESS)
+    if (this->debugMessenger.init(instance, nullptr) != VK_SUCCESS)
     {
         throw std::runtime_error("failed to set up debug messenger!");
     }
-#endif
 }
 
 void VulkanAPI::createSurface()
@@ -1163,9 +1115,7 @@ void VulkanAPI::preRelease()
 
         device.destroyCommandPool(commandPool);
         device.destroy();
-#if defined(_DEBUG)
-        DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
-#endif
+        debugMessenger.release(instance, nullptr);
         if (surface != nullptr)
         {
             instance.destroySurfaceKHR(surface);

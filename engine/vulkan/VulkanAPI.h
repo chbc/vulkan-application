@@ -6,6 +6,7 @@
 #pragma once
 
 #include "engine/sdl/SDLAPI.h"
+#include "DebugMessenger.h"
 #include <vector>
 
 namespace vk
@@ -28,6 +29,7 @@ private:
 	std::vector<const char*> extensions;
 	std::vector<const char*> validationLayers;
 	SDLAPI *sdlApi;
+	DebugMessenger debugMessenger;
 
 public:
 	void init(SDLAPI& sdlApi);
