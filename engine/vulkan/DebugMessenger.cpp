@@ -9,7 +9,7 @@ VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
     const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
     void* pUserData)
 {
-    std::cerr << "validation layer: " << pCallbackData->pMessage << std::endl;
+    std::cerr << "Validation layer: " << pCallbackData->pMessage << std::endl;
 
     return VK_FALSE;
 }
@@ -23,7 +23,7 @@ VkResult DebugMessenger::init(VkInstance instance, const VkAllocationCallbacks* 
     auto func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
     if (func != nullptr)
     {
-        return func(instance, &messengerCreateInfo, pAllocator, &this->debugMessenger);
+        return func(instance, &messengerCreateInfo, pAllocator, &this->debugUtilsMessenger);
     }
 
     return VK_ERROR_EXTENSION_NOT_PRESENT;
@@ -49,7 +49,7 @@ void DebugMessenger::release(VkInstance instance, const VkAllocationCallbacks* p
     auto func = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
     if (func != nullptr)
     {
-        func(instance, this->debugMessenger, pAllocator);
+        func(instance, this->debugUtilsMessenger, pAllocator);
     }
 #endif
 }

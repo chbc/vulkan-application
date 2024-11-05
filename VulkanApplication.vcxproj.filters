@@ -31,6 +31,9 @@
     <ClCompile Include="engine\vulkan\DebugMessenger.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="engine\vulkan\ValidationLayers.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="engine\vulkan\VulkanAPI.h">
@@ -46,6 +49,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="engine\vulkan\DebugMessenger.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="engine\vulkan\ValidationLayers.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

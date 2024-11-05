@@ -9,7 +9,7 @@ struct VkAllocationCallbacks;
 class DebugMessenger
 {
 private:
-	VkDebugUtilsMessengerEXT debugMessenger;
+	VkDebugUtilsMessengerEXT debugUtilsMessenger;
 
 private:
 	VkResult init(VkInstance instance, const VkAllocationCallbacks* pAllocator);

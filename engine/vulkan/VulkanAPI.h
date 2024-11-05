@@ -7,6 +7,7 @@
 
 #include "engine/sdl/SDLAPI.h"
 #include "DebugMessenger.h"
+#include "ValidationLayers.h"
 #include <vector>
 
 namespace vk
@@ -26,10 +27,9 @@ struct SwapChainSupportDetails;
 class VulkanAPI
 {
 private:
-	std::vector<const char*> extensions;
-	std::vector<const char*> validationLayers;
 	SDLAPI *sdlApi;
 	DebugMessenger debugMessenger;
+	ValidationLayers validationLayers;
 
 public:
 	void init(SDLAPI& sdlApi);
@@ -37,6 +37,7 @@ public:
 
 private:
 	void createInstance();
+	std::vector<const char*> getRequiredExtensions();
 	void setupDebugMessenger();
 	void createSurface();
 	void pickPhysicalDevice();
@@ -65,8 +66,6 @@ private:
 	bool isDeviceSuitable(const vk::PhysicalDevice& device);
 	bool checkDeviceExtensionSupport(const vk::PhysicalDevice& device);
 	QueueFamilyIndices findQueueFamilies(const vk::PhysicalDevice& device);
-	void getRequiredExtensions();
-	bool checkValidationLayerSupport();
 	void cleanupSwapChain();
 	void recreateSwapChain();
 	void preRelease();

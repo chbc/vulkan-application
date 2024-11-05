@@ -200,7 +200,6 @@ void VulkanAPI::init(SDLAPI& sdlApi)
 {
     this->sdlApi = &sdlApi;
 
-    getRequiredExtensions();
     createInstance();
     setupDebugMessenger();
     createSurface();
@@ -294,15 +293,36 @@ void VulkanAPI::drawFrame()
     currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 }
 
+std::vector<const char*> VulkanAPI::getRequiredExtensions()
+{
+    std::vector<const char*> result;
+
+    unsigned extension_count;
+    // Get WSI extensions from SDL (we can add more if we like - we just can't remove these)
+    if (!SDL_Vulkan_GetInstanceExtensions(sdlApi->window, &extension_count, NULL))
+    {
+        throw std::exception("Could not get the number of required instance extensions from SDL.");
+    }
+
+    result.resize(extension_count);
+    if (!SDL_Vulkan_GetInstanceExtensions(sdlApi->window, &extension_count, result.data()))
+    {
+        throw std::exception("Could not get the names of required instance extensions from SDL.");
+    }
+
+#if defined(_DEBUG)
+    result.push_back("VK_EXT_debug_utils");
+#endif
+
+    return result;
+}
+
 void VulkanAPI::createInstance()
 {
-#if defined(_DEBUG)
-    validationLayers.push_back("VK_LAYER_KHRONOS_validation");
-    if (!checkValidationLayerSupport())
+    if (!validationLayers.checkSupport())
     {
         throw std::runtime_error("Validation layers requested, bot not available!");
     }
-#endif
 
     // vk::ApplicationInfo allows the programmer to specifiy some basic information about the
     // program, which can be useful for layers and tools to provide more debug information.
@@ -315,13 +335,12 @@ void VulkanAPI::createInstance()
 
     // vk::InstanceCreateInfo is where the programmer specifies the layers and/or extensions that
     // are needed.
+    std::vector<const char*> extensions = getRequiredExtensions();
     vk::InstanceCreateInfo createInfo = vk::InstanceCreateInfo()
         .setFlags(vk::InstanceCreateFlags())
         .setPApplicationInfo(&appInfo)
-        .setEnabledExtensionCount(static_cast<uint32_t>(extensions.size()))
-        .setPpEnabledExtensionNames(extensions.data())
-        .setEnabledLayerCount(static_cast<uint32_t>(validationLayers.size()))
-        .setPpEnabledLayerNames(validationLayers.data());
+        .setPEnabledExtensionNames(extensions)
+        .setPEnabledLayerNames(validationLayers.getData());
 
     VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo;
     debugMessenger.populateDebugMessengerCreateInfo(debugCreateInfo);
@@ -409,14 +428,8 @@ void VulkanAPI::createLogicalDevice()
         .setPQueueCreateInfos(queueCreateInfos.data())
         .setPEnabledFeatures(&deviceFeatures)
         .setEnabledExtensionCount(static_cast<uint32_t>(deviceExtensions.size()))
-        .setPpEnabledExtensionNames(deviceExtensions.data());
-
-#if defined(_DEBUG)
-    createInfo.setEnabledLayerCount(static_cast<uint32_t>(validationLayers.size()))
-        .setPpEnabledLayerNames(validationLayers.data());
-#else
-    createInfo.setEnabledLayerCount(0);
-#endif
+        .setPpEnabledExtensionNames(deviceExtensions.data())
+        .setPEnabledLayerNames(validationLayers.getData());
 
     device = physicalDevice.createDevice(createInfo);
 
@@ -1003,58 +1016,6 @@ QueueFamilyIndices VulkanAPI::findQueueFamilies(const vk::PhysicalDevice& device
     }
 
     return indices;
-}
-
-void VulkanAPI::getRequiredExtensions()
-{
-    unsigned extension_count;
-    // Get WSI extensions from SDL (we can add more if we like - we just can't remove these)
-    if (!SDL_Vulkan_GetInstanceExtensions(sdlApi->window, &extension_count, NULL))
-    {
-        throw std::exception("Could not get the number of required instance extensions from SDL.");
-    }
-
-    extensions.resize(extension_count);
-    if (!SDL_Vulkan_GetInstanceExtensions(sdlApi->window, &extension_count, extensions.data()))
-    {
-        throw std::exception("Could not get the names of required instance extensions from SDL.");
-    }
-
-#if defined(_DEBUG)
-    extensions.push_back("VK_EXT_debug_utils");
-#endif
-}
-
-bool VulkanAPI::checkValidationLayerSupport()
-{
-    uint32_t layerCount;
-    if (vk::enumerateInstanceLayerProperties(&layerCount, nullptr) != vk::Result::eSuccess)
-    {
-        return false;
-    }
-
-    std::vector<vk::LayerProperties> availableLayers(layerCount);
-    if (vk::enumerateInstanceLayerProperties(&layerCount, availableLayers.data()) != vk::Result::eSuccess)
-    {
-        return false;
-    }
-
-    bool result = false;
-
-    for (const char* layerName : validationLayers)
-    {
-        result = false;
-        for (const auto& layerProperties : availableLayers)
-        {
-            if (strcmp(layerName, layerProperties.layerName) == 0)
-            {
-                result = true;
-                break;
-            }
-        }
-    }
-
-    return result;
 }
 
 void VulkanAPI::cleanupSwapChain()

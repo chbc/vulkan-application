@@ -161,6 +161,7 @@
     <ClCompile Include="engine\Platform.cpp" />
     <ClCompile Include="engine\sdl\SDLAPI.cpp" />
     <ClCompile Include="engine\vulkan\DebugMessenger.cpp" />
+    <ClCompile Include="engine\vulkan\ValidationLayers.cpp" />
     <ClCompile Include="engine\vulkan\VulkanAPI.cpp" />
     <ClCompile Include="main.cpp" />
   </ItemGroup>
@@ -169,6 +170,7 @@
     <ClInclude Include="engine\sdl\SDLAPI.h" />
     <ClInclude Include="engine\Utils.h" />
     <ClInclude Include="engine\vulkan\DebugMessenger.h" />
+    <ClInclude Include="engine\vulkan\ValidationLayers.h" />
     <ClInclude Include="engine\vulkan\VulkanAPI.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
