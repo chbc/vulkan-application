@@ -44,7 +44,7 @@ bool ValidationLayers::checkSupport()
     return true;
 }
 
-std::vector<const char*>& ValidationLayers::getData()
+const std::vector<const char*>& ValidationLayers::getData() const
 {
     return data;
 }

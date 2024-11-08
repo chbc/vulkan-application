@@ -8,20 +8,10 @@
 #include "engine/sdl/SDLAPI.h"
 #include "DebugMessenger.h"
 #include "ValidationLayers.h"
+#include "Devices.h"
+
 #include <vector>
 
-namespace vk
-{
-	class PhysicalDevice;
-	struct SurfaceFormatKHR;
-	enum class PresentModeKHR;
-	struct Extent2D;
-	struct SurfaceCapabilitiesKHR;
-	class ShaderModule;
-	class CommandBuffer;
-}
-
-struct QueueFamilyIndices;
 struct SwapChainSupportDetails;
 
 class VulkanAPI
@@ -30,18 +20,19 @@ private:
 	SDLAPI *sdlApi;
 	DebugMessenger debugMessenger;
 	ValidationLayers validationLayers;
+	Devices devices;
 
 public:
 	void init(SDLAPI& sdlApi);
 	void drawFrame();
 
 private:
+	void createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, 
+		vk::MemoryPropertyFlags properties, vk::Buffer& buffer, vk::DeviceMemory& bufferMemory);
+	void copyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer, vk::DeviceSize size);
 	void createInstance();
 	std::vector<const char*> getRequiredExtensions();
-	void setupDebugMessenger();
 	void createSurface();
-	void pickPhysicalDevice();
-	void createLogicalDevice();
 	void createSwapChain();
 	void createImageViews();
 	void createRenderPass();
@@ -62,10 +53,6 @@ private:
 	vk::SurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats);
 	vk::PresentModeKHR chooseSwapPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes);
 	vk::Extent2D chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities);
-	SwapChainSupportDetails querySwapChainSupport(const vk::PhysicalDevice& device);
-	bool isDeviceSuitable(const vk::PhysicalDevice& device);
-	bool checkDeviceExtensionSupport(const vk::PhysicalDevice& device);
-	QueueFamilyIndices findQueueFamilies(const vk::PhysicalDevice& device);
 	void cleanupSwapChain();
 	void recreateSwapChain();
 	void preRelease();

@@ -10,7 +10,8 @@ private:
 private:
 	ValidationLayers();
 	bool checkSupport();
-	std::vector<const char*>& getData();
+	const std::vector<const char*>& getData() const;
 
 friend class VulkanAPI;
+friend class Devices;
 };

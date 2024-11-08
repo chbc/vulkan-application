@@ -12,7 +12,7 @@ private:
 	VkDebugUtilsMessengerEXT debugUtilsMessenger;
 
 private:
-	VkResult init(VkInstance instance, const VkAllocationCallbacks* pAllocator);
+	void init(VkInstance instance, const VkAllocationCallbacks* pAllocator);
 	void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& messengerCreateInfo);
 	void release(VkInstance instance, const VkAllocationCallbacks* pAllocator);
 

@@ -14,22 +14,24 @@ VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
     return VK_FALSE;
 }
 
-VkResult DebugMessenger::init(VkInstance instance, const VkAllocationCallbacks* pAllocator)
+void DebugMessenger::init(VkInstance instance, const VkAllocationCallbacks* pAllocator)
 {
 #if defined(_DEBUG)
     VkDebugUtilsMessengerCreateInfoEXT messengerCreateInfo;
     this->populateDebugMessengerCreateInfo(messengerCreateInfo);
 
+    VkResult result = VK_ERROR_EXTENSION_NOT_PRESENT;
     auto func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
     if (func != nullptr)
     {
-        return func(instance, &messengerCreateInfo, pAllocator, &this->debugUtilsMessenger);
+        result = func(instance, &messengerCreateInfo, pAllocator, &this->debugUtilsMessenger);
     }
 
-    return VK_ERROR_EXTENSION_NOT_PRESENT;
+    if (result != VK_SUCCESS)
+    {
+        throw std::runtime_error("failed to set up debug messenger!");
+    }
 #endif
-
-    return VK_SUCCESS;
 }
 
 void DebugMessenger::populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& messengerCreateInfo)
