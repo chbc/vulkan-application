@@ -9,6 +9,7 @@
 #include "DebugMessenger.h"
 #include "ValidationLayers.h"
 #include "Devices.h"
+#include "SwapChain.h"
 
 #include <vector>
 
@@ -21,6 +22,7 @@ private:
 	DebugMessenger debugMessenger;
 	ValidationLayers validationLayers;
 	Devices devices;
+	Swapchain swapchain;
 
 public:
 	void init(SDLAPI& sdlApi);
@@ -33,11 +35,9 @@ private:
 	void createInstance();
 	std::vector<const char*> getRequiredExtensions();
 	void createSurface();
-	void createSwapChain();
-	void createImageViews();
 	void createRenderPass();
 	void createGraphicsPipeline();
-	void createFramebuffers();
+
 	void createCommandPool();
 	void createVertexBuffer();
 	void createIndexBuffer();
@@ -50,10 +50,7 @@ private:
 	void createSyncObjects();
 	void updateUniformBuffer(uint32_t currentImage);
 	vk::ShaderModule createShaderModule(const std::vector<char>& code);
-	vk::SurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats);
-	vk::PresentModeKHR chooseSwapPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes);
-	vk::Extent2D chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities);
-	void cleanupSwapChain();
+
 	void recreateSwapChain();
 	void preRelease();
 	void release();

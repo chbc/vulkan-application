@@ -14,13 +14,6 @@
 
 #include <chrono>
 
-struct SwapChainSupportDetails
-{
-    vk::SurfaceCapabilitiesKHR capabilities;
-    std::vector<vk::SurfaceFormatKHR> formats;
-    std::vector<vk::PresentModeKHR> presentModes;
-};
-
 struct Vertex
 {
     glm::vec2 pos;
@@ -79,16 +72,12 @@ vk::Instance instance = nullptr;
 vk::Queue graphicsQueue;
 vk::Queue presentQueue;
 
-vk::SwapchainKHR swapChain;
-std::vector<vk::Image> swapChainImages;
-vk::Format swapChainImageFormat;
-vk::Extent2D swapChainExtent;
-std::vector<vk::ImageView> swapChainImageViews;
+
 vk::RenderPass renderPass;
 vk::DescriptorSetLayout descriptorSetLayout;
 vk::PipelineLayout pipelineLayout;
 vk::Pipeline graphicsPipeline;
-std::vector<vk::Framebuffer> swapChainFramebuffers;
+
 vk::CommandPool commandPool;
 std::vector<vk::CommandBuffer> commandBuffers;
 std::vector<vk::Semaphore> imageAvailableSemaphores;
@@ -175,12 +164,12 @@ void VulkanAPI::init(SDLAPI& sdlApi)
     createSurface();
     this->devices.init(instance, surface, this->validationLayers);
     this->devices.getQueues(graphicsQueue, presentQueue);
-    createSwapChain();
-    createImageViews();
+    this->swapchain.init(surface, this->sdlApi->window, this->devices);
+    this->swapchain.createImageViews(this->devices);
     createRenderPass();
     createDescriptorSetLayout();
     createGraphicsPipeline();
-    createFramebuffers();
+    this->swapchain.createFramebuffers(devices, renderPass);
     createCommandPool();
     createVertexBuffer();
     createIndexBuffer();
@@ -199,7 +188,8 @@ void VulkanAPI::drawFrame()
         throw std::runtime_error("drawFrame() - Couldn't wait for fence!");
     }
 
-    vk::ResultValue<uint32_t> imageIndex = logicalDevice->acquireNextImageKHR(swapChain, UINT64_MAX, imageAvailableSemaphores[currentFrame]);
+    vk::SwapchainKHR* swapchainKHR = swapchain.getSwapchainKHR();
+    vk::ResultValue<uint32_t> imageIndex = logicalDevice->acquireNextImageKHR(*swapchainKHR, UINT64_MAX, imageAvailableSemaphores[currentFrame]);
 
     if (imageIndex.result == vk::Result::eErrorOutOfDateKHR)
     {
@@ -239,7 +229,7 @@ void VulkanAPI::drawFrame()
         throw std::runtime_error("Failed to submit draw command buffer!");
     }
 
-    vk::SwapchainKHR swapChains[] = { swapChain };
+    vk::SwapchainKHR swapChains[] = { *swapchainKHR };
 
     vk::PresentInfoKHR presentInfo = vk::PresentInfoKHR()
         .setWaitSemaphoreCount(1)
@@ -343,89 +333,12 @@ void VulkanAPI::createSurface()
     surface = c_surface;
 }
 
-void VulkanAPI::createSwapChain()
-{
-    SwapChainSupportDetails swapChainSupport = this->devices.querySwapChainSupport(surface);
-
-    vk::SurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats);
-    vk::PresentModeKHR presentMode = chooseSwapPresentMode(swapChainSupport.presentModes);
-    vk::Extent2D extent = chooseSwapExtent(swapChainSupport.capabilities);
-
-    uint32_t imageCount = swapChainSupport.capabilities.minImageCount + 1;
-    if ((swapChainSupport.capabilities.maxImageCount > 0) && (imageCount > swapChainSupport.capabilities.maxImageCount))
-    {
-        imageCount = swapChainSupport.capabilities.maxImageCount;
-    }
-
-    vk::SwapchainCreateInfoKHR createInfo = vk::SwapchainCreateInfoKHR()
-        .setSurface(surface)
-        .setMinImageCount(imageCount)
-        .setImageFormat(surfaceFormat.format)
-        .setImageColorSpace(surfaceFormat.colorSpace)
-        .setImageExtent(extent)
-        .setImageArrayLayers(1)
-        .setImageUsage(vk::ImageUsageFlagBits::eColorAttachment)
-        .setPreTransform(swapChainSupport.capabilities.currentTransform)
-        .setCompositeAlpha(vk::CompositeAlphaFlagBitsKHR::eOpaque)
-        .setPresentMode(presentMode)
-        .setClipped(vk::True)
-        .setOldSwapchain(nullptr);
-
-    QueueFamilyIndices indices = this->devices.findQueueFamilies(surface);
-    uint32_t queueFamilyIndices[] = { indices.graphicsFamily.value(), indices.presentFamily.value() };
-
-    if (indices.graphicsFamily != indices.presentFamily)
-    {
-        createInfo.setImageSharingMode(vk::SharingMode::eConcurrent);
-        createInfo.setQueueFamilyIndexCount(2);
-        createInfo.setPQueueFamilyIndices(queueFamilyIndices);
-    }
-    else
-    {
-        createInfo.setImageSharingMode(vk::SharingMode::eExclusive);
-        createInfo.setQueueFamilyIndexCount(0);
-        createInfo.setPQueueFamilyIndices(nullptr);
-    }
-
-    vk::Device* logicalDevice = this->devices.getDevice();
-    swapChain = logicalDevice->createSwapchainKHR(createInfo);
-    swapChainImages = logicalDevice->getSwapchainImagesKHR(swapChain);
-    swapChainImageFormat = surfaceFormat.format;
-    swapChainExtent = extent;
-}
-
-void VulkanAPI::createImageViews()
-{
-    swapChainImageViews.resize(swapChainImages.size());
-    for (size_t i = 0; i < swapChainImages.size(); i++)
-    {
-        vk::ComponentMapping components
-        {
-            vk::ComponentSwizzle::eIdentity, vk::ComponentSwizzle::eIdentity,
-            vk::ComponentSwizzle::eIdentity, vk::ComponentSwizzle::eIdentity
-        };
-
-        vk::ImageSubresourceRange subresourceRange{ vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 };
-
-        vk::ImageViewCreateInfo createInfo = vk::ImageViewCreateInfo()
-            .setImage(swapChainImages[i])
-            .setViewType(vk::ImageViewType::e2D)
-            .setFormat(swapChainImageFormat)
-            .setComponents(components)
-            .setSubresourceRange(subresourceRange);
-
-        swapChainImageViews[i] = this->devices.getDevice()->createImageView(createInfo);
-        if (swapChainImageViews[i] == nullptr)
-        {
-            throw std::runtime_error("Failed to create image views!");
-        }
-    }
-}
-
 void VulkanAPI::createRenderPass()
 {
+    vk::Format swapchainImageFormat = this->swapchain.getImageFormat();
+
     vk::AttachmentDescription colorAttachment = vk::AttachmentDescription()
-        .setFormat(swapChainImageFormat)
+        .setFormat(swapchainImageFormat)
         .setSamples(vk::SampleCountFlagBits::e1)
         .setLoadOp(vk::AttachmentLoadOp::eClear)
         .setStoreOp(vk::AttachmentStoreOp::eStore)
@@ -586,24 +499,7 @@ void VulkanAPI::createGraphicsPipeline()
     logicalDevice->destroyShaderModule(fragShaderModule);
 }
 
-void VulkanAPI::createFramebuffers()
-{
-    swapChainFramebuffers.resize(swapChainImageViews.size());
-    for (size_t i = 0; i < swapChainImageViews.size(); i++)
-    {
-        vk::ImageView attachments[] = { swapChainImageViews[i] };
 
-        vk::FramebufferCreateInfo framebufferInfo = vk::FramebufferCreateInfo()
-            .setRenderPass(renderPass)
-            .setAttachmentCount(1)
-            .setPAttachments(attachments)
-            .setWidth(swapChainExtent.width)
-            .setHeight(swapChainExtent.height)
-            .setLayers(1);
-
-        swapChainFramebuffers[i] = this->devices.getDevice()->createFramebuffer(framebufferInfo);
-    }
-}
 
 void VulkanAPI::createCommandPool()
 {
@@ -729,11 +625,15 @@ void VulkanAPI::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint32_t im
 
     commandBuffer.begin(beginInfo);
 
+    vk::Framebuffer framebuffer;
+    this->swapchain.getFramebuffer(imageIndex, framebuffer);
+    vk::Extent2D swapchainExtent = this->swapchain.getExtent();
+
     vk::ClearValue clearColor{ {0.0f, 0.0f, 0.0f, 1.0f} };
     vk::RenderPassBeginInfo renderPassInfo = vk::RenderPassBeginInfo()
         .setRenderPass(renderPass)
-        .setFramebuffer(swapChainFramebuffers[imageIndex])
-        .setRenderArea(vk::Rect2D{ {0, 0}, swapChainExtent })
+        .setFramebuffer(framebuffer)
+        .setRenderArea(vk::Rect2D{ {0, 0}, swapchainExtent })
         .setClearValueCount(1)
         .setPClearValues(&clearColor);
 
@@ -742,14 +642,14 @@ void VulkanAPI::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint32_t im
 
     vk::Viewport viewport = vk::Viewport()
         .setX(0.0f).setY(0.0f)
-        .setWidth(static_cast<float>(swapChainExtent.width))
-        .setHeight(static_cast<float>(swapChainExtent.height))
+        .setWidth(static_cast<float>(swapchainExtent.width))
+        .setHeight(static_cast<float>(swapchainExtent.height))
         .setMinDepth(0.0f)
         .setMaxDepth(1.0f);
 
     commandBuffer.setViewport(0, 1, &viewport);
 
-    vk::Rect2D scissor{ {0, 0}, swapChainExtent };
+    vk::Rect2D scissor{ {0, 0}, swapchainExtent };
     commandBuffer.setScissor(0, 1, &scissor);
 
     vk::Buffer vertexBuffers[] = { vertexBuffer };
@@ -789,10 +689,11 @@ void VulkanAPI::updateUniformBuffer(uint32_t currentImage)
     auto currentTime = std::chrono::high_resolution_clock::now();
     float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
 
+    vk::Extent2D swapchainExtent = this->swapchain.getExtent();
     UniformBufferObject ubo;
     ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
     ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-    ubo.proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / (float)swapChainExtent.height, 0.1f, 10.0f);
+    ubo.proj = glm::perspective(glm::radians(45.0f), swapchainExtent.width / (float)swapchainExtent.height, 0.1f, 10.0f);
     ubo.proj[1][1] *= -1.0f;
 
     memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
@@ -808,83 +709,15 @@ vk::ShaderModule VulkanAPI::createShaderModule(const std::vector<char>& code)
     return shaderModule;
 }
 
-vk::SurfaceFormatKHR VulkanAPI::chooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats)
-{
-    for (const auto& availableFormat : availableFormats)
-    {
-        if ((availableFormat.format == vk::Format::eB8G8R8A8Srgb) &&
-            (availableFormat.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear)
-            )
-        {
-            return availableFormat;
-        }
-    }
-
-    return availableFormats[0];
-}
-
-vk::PresentModeKHR VulkanAPI::chooseSwapPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes)
-{
-    for (const auto& availablePresentMode : availablePresentModes)
-    {
-        if (availablePresentMode == vk::PresentModeKHR::eMailbox)
-        {
-            return availablePresentMode;
-        }
-    }
-
-    return vk::PresentModeKHR::eFifo;
-}
-
-vk::Extent2D VulkanAPI::chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities)
-{
-    if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max())
-    {
-        return capabilities.currentExtent;
-    }
-
-    int width, height;
-    SDL_Vulkan_GetDrawableSize(sdlApi->window, &width, &height);
-
-    vk::Extent2D actualExtent = { static_cast<uint32_t>(width), static_cast<uint32_t>(height) };
-    actualExtent.width = std::clamp
-    (
-        actualExtent.width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width
-    );
-
-    actualExtent.height = std::clamp
-    (
-        actualExtent.height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height
-    );
-
-    return actualExtent;
-}
-
-void VulkanAPI::cleanupSwapChain()
-{
-    vk::Device* logicalDevice = this->devices.getDevice();
-    for (vk::Framebuffer& framebuffer : swapChainFramebuffers)
-    {
-        logicalDevice->destroyFramebuffer(framebuffer);
-    }
-
-    for (const vk::ImageView& imageView : swapChainImageViews)
-    {
-        logicalDevice->destroyImageView(imageView);
-    }
-
-    logicalDevice->destroySwapchainKHR(swapChain);
-}
-
 void VulkanAPI::recreateSwapChain()
 {
     this->devices.getDevice()->waitIdle();
 
-    cleanupSwapChain();
+    this->swapchain.cleanup(this->devices);
 
-    createSwapChain();
-    createImageViews();
-    createFramebuffers();
+    this->swapchain.init(surface, this->sdlApi->window, this->devices);
+    this->swapchain.createImageViews(this->devices);
+    this->swapchain.createFramebuffers(this->devices, renderPass);
 }
 
 void VulkanAPI::preRelease()
@@ -894,7 +727,7 @@ void VulkanAPI::preRelease()
     if (instance != nullptr)
     {
         logicalDevice->waitIdle();
-        cleanupSwapChain();
+        this->swapchain.cleanup(this->devices);
 
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
         {

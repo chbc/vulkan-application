@@ -1,15 +1,9 @@
 #include "Devices.h"
 #include "ValidationLayers.h"
+#include "Swapchain.h"
 
 #include <vulkan/vulkan.hpp>
 #include <set>
-
-struct SwapChainSupportDetails
-{
-    vk::SurfaceCapabilitiesKHR capabilities;
-    std::vector<vk::SurfaceFormatKHR> formats;
-    std::vector<vk::PresentModeKHR> presentModes;
-};
 
 const std::vector<const char*> deviceExtensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
 
@@ -80,6 +74,11 @@ vk::Device* Devices::getDevice()
     return this->logicalDevice.get();
 }
 
+vk::PhysicalDevice* Devices::getPhysicalDevice()
+{
+    return this->physicalDevice.get();
+}
+
 void Devices::getQueues(vk::Queue& graphics, vk::Queue& present)
 {
     graphics = this->logicalDevice->getQueue(familyIndices.graphicsFamily.value(), 0);
@@ -109,8 +108,7 @@ bool Devices::isDeviceSuitable(const vk::SurfaceKHR& surface, const vk::Physical
 
     if (extensionsSupported)
     {
-        SwapChainSupportDetails swapChainSupport = querySwapChainSupport(surface, &device);
-        swapChainAdequate = !swapChainSupport.formats.empty() && !swapChainSupport.presentModes.empty();
+        swapChainAdequate = Swapchain::isSwapChainAdequate(surface, &device);
     }
 
     bool result = indices.isComplete() && extensionsSupported && swapChainAdequate;
@@ -165,19 +163,4 @@ bool Devices::checkDeviceExtensionSupport(const vk::PhysicalDevice& device)
     }
 
     return requiredExtensions.empty();
-}
-
-SwapChainSupportDetails Devices::querySwapChainSupport(const vk::SurfaceKHR& surface)
-{
-    return this->querySwapChainSupport(surface, this->physicalDevice.get());
-}
-
-SwapChainSupportDetails Devices::querySwapChainSupport(const vk::SurfaceKHR& surface, const vk::PhysicalDevice* device)
-{
-    SwapChainSupportDetails details;
-    details.capabilities = device->getSurfaceCapabilitiesKHR(surface);
-    details.formats = device->getSurfaceFormatsKHR(surface);
-    details.presentModes = device->getSurfacePresentModesKHR(surface);
-
-    return details;
 }

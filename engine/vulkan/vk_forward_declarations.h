@@ -8,16 +8,20 @@ namespace vk
 	class PhysicalDevice;
 	class ShaderModule;
 	class CommandBuffer;
+	class SwapchainKHR;
 	class SurfaceKHR;
 	class Buffer;
 	class DeviceMemory;
 	class Queue;
+	class RenderPass;
+	class Framebuffer;
 
 	struct SurfaceFormatKHR;
 	struct Extent2D;
 	struct SurfaceCapabilitiesKHR;
 
 	enum class PresentModeKHR;
+	enum class Format;
 
 	template <typename BitType>	class Flags;
 	typedef uint32_t VkFlags;
