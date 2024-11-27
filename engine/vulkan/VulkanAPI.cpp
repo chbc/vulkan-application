@@ -117,16 +117,17 @@ void VulkanAPI::createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk
         .setUsage(usage)
         .setSharingMode(vk::SharingMode::eExclusive);
 
-    buffer = this->devices.getDevice()->createBuffer(bufferInfo);
+    vk::Device* logicalDevice = this->devices.getDevice();
+    buffer = logicalDevice->createBuffer(bufferInfo);
 
-    vk::MemoryRequirements memRequirements = this->devices.getDevice()->getBufferMemoryRequirements(buffer);
+    vk::MemoryRequirements memRequirements = logicalDevice->getBufferMemoryRequirements(buffer);
 
     vk::MemoryAllocateInfo allocInfo = vk::MemoryAllocateInfo()
         .setAllocationSize(memRequirements.size)
         .setMemoryTypeIndex(this->devices.findMemoryType(memRequirements.memoryTypeBits, properties));
 
-    bufferMemory = this->devices.getDevice()->allocateMemory(allocInfo);
-    this->devices.getDevice()->bindBufferMemory(buffer, bufferMemory, 0);
+    bufferMemory = logicalDevice->allocateMemory(allocInfo);
+    logicalDevice->bindBufferMemory(buffer, bufferMemory, 0);
 }
 
 void VulkanAPI::copyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer, vk::DeviceSize size)
@@ -135,9 +136,10 @@ void VulkanAPI::copyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer, vk::Devic
         .setLevel(vk::CommandBufferLevel::ePrimary)
         .setCommandPool(commandPool)
         .setCommandBufferCount(1);
-
+    
+    vk::Device* logicalDevice = this->devices.getDevice();
     vk::CommandBuffer commandBuffer;
-    if (this->devices.getDevice()->allocateCommandBuffers(&allocInfo, &commandBuffer) != vk::Result::eSuccess)
+    if (logicalDevice->allocateCommandBuffers(&allocInfo, &commandBuffer) != vk::Result::eSuccess)
     {
         throw std::runtime_error("Failed to allocate command buffer!");
     }
@@ -161,7 +163,7 @@ void VulkanAPI::copyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer, vk::Devic
     graphicsQueue.submit(submitInfo);
     graphicsQueue.waitIdle();
 
-    this->devices.getDevice()->freeCommandBuffers(commandPool, commandBuffer);
+    logicalDevice->freeCommandBuffers(commandPool, commandBuffer);
 }
 
 void VulkanAPI::init(SDLAPI& sdlApi)
@@ -191,12 +193,13 @@ void VulkanAPI::init(SDLAPI& sdlApi)
 
 void VulkanAPI::drawFrame()
 {
-    if (this->devices.getDevice()->waitForFences(1, &inFlightFences[currentFrame], vk::True, UINT64_MAX) != vk::Result::eSuccess)
+    vk::Device* logicalDevice = this->devices.getDevice();
+    if (logicalDevice->waitForFences(1, &inFlightFences[currentFrame], vk::True, UINT64_MAX) != vk::Result::eSuccess)
     {
         throw std::runtime_error("drawFrame() - Couldn't wait for fence!");
     }
 
-    vk::ResultValue<uint32_t> imageIndex = this->devices.getDevice()->acquireNextImageKHR(swapChain, UINT64_MAX, imageAvailableSemaphores[currentFrame]);
+    vk::ResultValue<uint32_t> imageIndex = logicalDevice->acquireNextImageKHR(swapChain, UINT64_MAX, imageAvailableSemaphores[currentFrame]);
 
     if (imageIndex.result == vk::Result::eErrorOutOfDateKHR)
     {
@@ -208,7 +211,7 @@ void VulkanAPI::drawFrame()
         throw std::runtime_error("Failed to acquire swap chain image!");
     }
 
-    if (this->devices.getDevice()->resetFences(1, &inFlightFences[currentFrame]) != vk::Result::eSuccess)
+    if (logicalDevice->resetFences(1, &inFlightFences[currentFrame]) != vk::Result::eSuccess)
     {
         throw std::runtime_error("drawFrame() - Couldn't reset fence!");
     }
@@ -384,8 +387,9 @@ void VulkanAPI::createSwapChain()
         createInfo.setPQueueFamilyIndices(nullptr);
     }
 
-    swapChain = this->devices.getDevice()->createSwapchainKHR(createInfo);
-    swapChainImages = this->devices.getDevice()->getSwapchainImagesKHR(swapChain);
+    vk::Device* logicalDevice = this->devices.getDevice();
+    swapChain = logicalDevice->createSwapchainKHR(createInfo);
+    swapChainImages = logicalDevice->getSwapchainImagesKHR(swapChain);
     swapChainImageFormat = surfaceFormat.format;
     swapChainExtent = extent;
 }
@@ -548,7 +552,8 @@ void VulkanAPI::createGraphicsPipeline()
         .setPushConstantRangeCount(0)
         .setPPushConstantRanges(nullptr);
 
-    if (this->devices.getDevice()->createPipelineLayout(&pipelineLayoutInfo, nullptr, &pipelineLayout) != vk::Result::eSuccess)
+    vk::Device* logicalDevice = this->devices.getDevice();
+    if (logicalDevice->createPipelineLayout(&pipelineLayoutInfo, nullptr, &pipelineLayout) != vk::Result::eSuccess)
     {
         throw std::runtime_error("Failed to create pipeline layout!");
     }
@@ -571,14 +576,14 @@ void VulkanAPI::createGraphicsPipeline()
         .setBasePipelineIndex(-1);
 
     vk::Result result;
-    std::tie(result, graphicsPipeline) = this->devices.getDevice()->createGraphicsPipeline(nullptr, pipelineInfo);
+    std::tie(result, graphicsPipeline) = logicalDevice->createGraphicsPipeline(nullptr, pipelineInfo);
     if (result != vk::Result::eSuccess)
     {
         throw std::runtime_error("Failed to create graphics pipeline!");
     }
 
-    this->devices.getDevice()->destroyShaderModule(vertShaderModule);
-    this->devices.getDevice()->destroyShaderModule(fragShaderModule);
+    logicalDevice->destroyShaderModule(vertShaderModule);
+    logicalDevice->destroyShaderModule(fragShaderModule);
 }
 
 void VulkanAPI::createFramebuffers()
@@ -613,6 +618,7 @@ void VulkanAPI::createCommandPool()
 
 void VulkanAPI::createVertexBuffer()
 {
+    vk::Device* logicalDevice = this->devices.getDevice();
     vk::DeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
 
     vk::Buffer stagingBuffer;
@@ -620,17 +626,17 @@ void VulkanAPI::createVertexBuffer()
     createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferSrc,
         vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, stagingBuffer, stagingBufferMemory);
 
-    void* data = this->devices.getDevice()->mapMemory(stagingBufferMemory, 0, bufferSize);
+    void* data = logicalDevice->mapMemory(stagingBufferMemory, 0, bufferSize);
     memcpy(data, vertices.data(), (size_t)bufferSize);
-    this->devices.getDevice()->unmapMemory(stagingBufferMemory);
+    logicalDevice->unmapMemory(stagingBufferMemory);
 
     createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer,
         vk::MemoryPropertyFlagBits::eDeviceLocal, vertexBuffer, vertexBufferMemory);
 
     copyBuffer(stagingBuffer, vertexBuffer, bufferSize);
 
-    this->devices.getDevice()->destroyBuffer(stagingBuffer);
-    this->devices.getDevice()->freeMemory(stagingBufferMemory);
+    logicalDevice->destroyBuffer(stagingBuffer);
+    logicalDevice->freeMemory(stagingBufferMemory);
 }
 
 void VulkanAPI::createIndexBuffer()
@@ -641,17 +647,18 @@ void VulkanAPI::createIndexBuffer()
     createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferSrc,
         vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, stagingBuffer, stagingBufferMemory);
 
-    void* data = this->devices.getDevice()->mapMemory(stagingBufferMemory, 0, bufferSize);
+    vk::Device* logicalDevice = this->devices.getDevice();
+    void* data = logicalDevice->mapMemory(stagingBufferMemory, 0, bufferSize);
     memcpy(data, indices.data(), (size_t)bufferSize);
-    this->devices.getDevice()->unmapMemory(stagingBufferMemory);
+    logicalDevice->unmapMemory(stagingBufferMemory);
 
     createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer,
         vk::MemoryPropertyFlagBits::eDeviceLocal, indexBuffer, indexBufferMemory);
 
     copyBuffer(stagingBuffer, indexBuffer, bufferSize);
 
-    this->devices.getDevice()->destroyBuffer(stagingBuffer);
-    this->devices.getDevice()->freeMemory(stagingBufferMemory);
+    logicalDevice->destroyBuffer(stagingBuffer);
+    logicalDevice->freeMemory(stagingBufferMemory);
 }
 
 void VulkanAPI::createUniformBuffers()
@@ -687,14 +694,15 @@ void VulkanAPI::createDescriptorPool()
 
 void VulkanAPI::createDescriptorSets()
 {
+    vk::Device* logicalDevice = this->devices.getDevice();
     vk::DescriptorSetAllocateInfo descriptorSetAllocateInfo{ descriptorPool, descriptorSetLayout };
-    descriptorSet = this->devices.getDevice()->allocateDescriptorSets(descriptorSetAllocateInfo).front();
+    descriptorSet = logicalDevice->allocateDescriptorSets(descriptorSetAllocateInfo).front();
 
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
     {
         vk::DescriptorBufferInfo descriptorBufferInfo{ uniformBuffers[i], 0, sizeof(UniformBufferObject) };
         vk::WriteDescriptorSet writeDescriptorSet{ descriptorSet, 0, 0, vk::DescriptorType::eUniformBuffer, {}, descriptorBufferInfo };
-        this->devices.getDevice()->updateDescriptorSets(writeDescriptorSet, nullptr);
+        logicalDevice->updateDescriptorSets(writeDescriptorSet, nullptr);
     }
 }
 
@@ -765,11 +773,12 @@ void VulkanAPI::createSyncObjects()
     renderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
     inFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
 
+    vk::Device* logicalDevice = this->devices.getDevice();
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
     {
-        imageAvailableSemaphores[i] = this->devices.getDevice()->createSemaphore(semaphoreInfo);
-        renderFinishedSemaphores[i] = this->devices.getDevice()->createSemaphore(semaphoreInfo);
-        inFlightFences[i] = this->devices.getDevice()->createFence(fenceInfo);
+        imageAvailableSemaphores[i] = logicalDevice->createSemaphore(semaphoreInfo);
+        renderFinishedSemaphores[i] = logicalDevice->createSemaphore(semaphoreInfo);
+        inFlightFences[i] = logicalDevice->createFence(fenceInfo);
     }
 }
 
@@ -853,17 +862,18 @@ vk::Extent2D VulkanAPI::chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capab
 
 void VulkanAPI::cleanupSwapChain()
 {
+    vk::Device* logicalDevice = this->devices.getDevice();
     for (vk::Framebuffer& framebuffer : swapChainFramebuffers)
     {
-        this->devices.getDevice()->destroyFramebuffer(framebuffer);
+        logicalDevice->destroyFramebuffer(framebuffer);
     }
 
     for (const vk::ImageView& imageView : swapChainImageViews)
     {
-        this->devices.getDevice()->destroyImageView(imageView);
+        logicalDevice->destroyImageView(imageView);
     }
 
-    this->devices.getDevice()->destroySwapchainKHR(swapChain);
+    logicalDevice->destroySwapchainKHR(swapChain);
 }
 
 void VulkanAPI::recreateSwapChain()
@@ -879,36 +889,38 @@ void VulkanAPI::recreateSwapChain()
 
 void VulkanAPI::preRelease()
 {
+    vk::Device* logicalDevice = this->devices.getDevice();
+
     if (instance != nullptr)
     {
-        this->devices.getDevice()->waitIdle();
+        logicalDevice->waitIdle();
         cleanupSwapChain();
 
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
         {
-            this->devices.getDevice()->destroyBuffer(uniformBuffers[i]);
-            this->devices.getDevice()->freeMemory(uniformBuffersMemory[i]);
+            logicalDevice->destroyBuffer(uniformBuffers[i]);
+            logicalDevice->freeMemory(uniformBuffersMemory[i]);
         }
 
-        this->devices.getDevice()->destroyDescriptorPool(descriptorPool);
-        this->devices.getDevice()->destroyDescriptorSetLayout(descriptorSetLayout);
-        this->devices.getDevice()->destroyBuffer(indexBuffer);
-        this->devices.getDevice()->freeMemory(indexBufferMemory);
-        this->devices.getDevice()->destroyBuffer(vertexBuffer);
-        this->devices.getDevice()->freeMemory(vertexBufferMemory);
-        this->devices.getDevice()->destroyPipeline(graphicsPipeline);
-        this->devices.getDevice()->destroyPipelineLayout(pipelineLayout);
-        this->devices.getDevice()->destroyRenderPass(renderPass);
+        logicalDevice->destroyDescriptorPool(descriptorPool);
+        logicalDevice->destroyDescriptorSetLayout(descriptorSetLayout);
+        logicalDevice->destroyBuffer(indexBuffer);
+        logicalDevice->freeMemory(indexBufferMemory);
+        logicalDevice->destroyBuffer(vertexBuffer);
+        logicalDevice->freeMemory(vertexBufferMemory);
+        logicalDevice->destroyPipeline(graphicsPipeline);
+        logicalDevice->destroyPipelineLayout(pipelineLayout);
+        logicalDevice->destroyRenderPass(renderPass);
 
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
         {
-            this->devices.getDevice()->destroySemaphore(renderFinishedSemaphores[i]);
-            this->devices.getDevice()->destroySemaphore(imageAvailableSemaphores[i]);
-            this->devices.getDevice()->destroyFence(inFlightFences[i]);
+            logicalDevice->destroySemaphore(renderFinishedSemaphores[i]);
+            logicalDevice->destroySemaphore(imageAvailableSemaphores[i]);
+            logicalDevice->destroyFence(inFlightFences[i]);
         }
 
-        this->devices.getDevice()->destroyCommandPool(commandPool);
-        this->devices.getDevice()->destroy();
+        logicalDevice->destroyCommandPool(commandPool);
+        logicalDevice->destroy();
         debugMessenger.release(instance, nullptr);
         if (surface != nullptr)
         {
