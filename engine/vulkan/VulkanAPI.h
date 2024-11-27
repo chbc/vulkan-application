@@ -50,8 +50,6 @@ private:
 	void createSyncObjects();
 	void updateUniformBuffer(uint32_t currentImage);
 	vk::ShaderModule createShaderModule(const std::vector<char>& code);
-
-	void recreateSwapChain();
 	void preRelease();
 	void release();
 

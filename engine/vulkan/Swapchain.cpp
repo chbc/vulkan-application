@@ -204,6 +204,17 @@ vk::Extent2D Swapchain::chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capab
     return actualExtent;
 }
 
+void Swapchain::recreate(const vk::SurfaceKHR& surface, SDL_Window* window, Devices& devices, vk::RenderPass& renderPass)
+{
+    devices.getDevice()->waitIdle();
+
+    this->cleanup(devices);
+
+    this->init(surface, window, devices);
+    this->createImageViews(devices);
+    this->createFramebuffers(devices, renderPass);
+}
+
 void Swapchain::cleanup(Devices& devices)
 {
     vk::Device* logicalDevice = devices.getDevice();

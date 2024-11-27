@@ -72,7 +72,6 @@ vk::Instance instance = nullptr;
 vk::Queue graphicsQueue;
 vk::Queue presentQueue;
 
-
 vk::RenderPass renderPass;
 vk::DescriptorSetLayout descriptorSetLayout;
 vk::PipelineLayout pipelineLayout;
@@ -193,7 +192,7 @@ void VulkanAPI::drawFrame()
 
     if (imageIndex.result == vk::Result::eErrorOutOfDateKHR)
     {
-        recreateSwapChain();
+        this->swapchain.recreate(surface, this->sdlApi->window, this->devices, renderPass);
         return;
     }
     else if ((imageIndex.result != vk::Result::eSuccess) && (imageIndex.result != vk::Result::eSuboptimalKHR))
@@ -244,7 +243,7 @@ void VulkanAPI::drawFrame()
     if ((result == vk::Result::eErrorOutOfDateKHR) || (result != vk::Result::eSuboptimalKHR) || framebufferResized)
     {
         framebufferResized = false;
-        recreateSwapChain();
+        this->swapchain.recreate(surface, this->sdlApi->window, this->devices, renderPass);
     }
     else if (result != vk::Result::eSuccess)
     {
@@ -707,17 +706,6 @@ vk::ShaderModule VulkanAPI::createShaderModule(const std::vector<char>& code)
 
     vk::ShaderModule shaderModule = this->devices.getDevice()->createShaderModule(createInfo);
     return shaderModule;
-}
-
-void VulkanAPI::recreateSwapChain()
-{
-    this->devices.getDevice()->waitIdle();
-
-    this->swapchain.cleanup(this->devices);
-
-    this->swapchain.init(surface, this->sdlApi->window, this->devices);
-    this->swapchain.createImageViews(this->devices);
-    this->swapchain.createFramebuffers(this->devices, renderPass);
 }
 
 void VulkanAPI::preRelease()

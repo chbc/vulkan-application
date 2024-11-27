@@ -26,6 +26,7 @@ private:
     vk::SurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats);
     vk::PresentModeKHR chooseSwapPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes);
     vk::Extent2D chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities, SDL_Window* window);
+    void recreate(const vk::SurfaceKHR& surface, SDL_Window* window, Devices& devices, vk::RenderPass& renderPass);
     void cleanup(Devices& devices);
 
 friend class VulkanAPI;
