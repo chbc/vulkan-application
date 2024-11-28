@@ -10,6 +10,7 @@
 #include "ValidationLayers.h"
 #include "Devices.h"
 #include "SwapChain.h"
+#include "RenderPass.h"
 
 #include <vector>
 
@@ -23,6 +24,7 @@ private:
 	ValidationLayers validationLayers;
 	Devices devices;
 	Swapchain swapchain;
+	RenderPass renderPass;
 
 public:
 	void init(SDLAPI& sdlApi);
@@ -35,7 +37,6 @@ private:
 	void createInstance();
 	std::vector<const char*> getRequiredExtensions();
 	void createSurface();
-	void createRenderPass();
 	void createGraphicsPipeline();
 
 	void createCommandPool();

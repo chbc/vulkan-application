@@ -96,7 +96,7 @@ void Swapchain::createImageViews(Devices& devices)
     }
 }
 
-void Swapchain::createFramebuffers(Devices& devices, vk::RenderPass& renderPass)
+void Swapchain::createFramebuffers(Devices& devices, vk::RenderPass* renderPass)
 {
     swapchainFramebuffers.resize(swapchainImageViews.size());
     for (size_t i = 0; i < swapchainImageViews.size(); i++)
@@ -104,7 +104,7 @@ void Swapchain::createFramebuffers(Devices& devices, vk::RenderPass& renderPass)
         vk::ImageView attachments[] = { swapchainImageViews[i] };
 
         vk::FramebufferCreateInfo framebufferInfo = vk::FramebufferCreateInfo()
-            .setRenderPass(renderPass)
+            .setRenderPass(*renderPass)
             .setAttachmentCount(1)
             .setPAttachments(attachments)
             .setWidth(swapchainExtent.width)
@@ -204,18 +204,18 @@ vk::Extent2D Swapchain::chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capab
     return actualExtent;
 }
 
-void Swapchain::recreate(const vk::SurfaceKHR& surface, SDL_Window* window, Devices& devices, vk::RenderPass& renderPass)
+void Swapchain::recreate(const vk::SurfaceKHR& surface, SDL_Window* window, Devices& devices, vk::RenderPass* renderPass)
 {
     devices.getDevice()->waitIdle();
 
-    this->cleanup(devices);
+    this->release(devices);
 
     this->init(surface, window, devices);
     this->createImageViews(devices);
     this->createFramebuffers(devices, renderPass);
 }
 
-void Swapchain::cleanup(Devices& devices)
+void Swapchain::release(Devices& devices)
 {
     vk::Device* logicalDevice = devices.getDevice();
     for (vk::Framebuffer& framebuffer : swapchainFramebuffers)

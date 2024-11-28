@@ -42,4 +42,5 @@ private:
 
 friend class VulkanAPI;
 friend class Swapchain;
+friend class RenderPass;
 };
