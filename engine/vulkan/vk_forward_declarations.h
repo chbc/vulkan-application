@@ -16,6 +16,11 @@ namespace vk
 	class RenderPass;
 	class Framebuffer;
 
+	class DescriptorSetLayout;
+	class DescriptorPool;
+	class DescriptorSet;
+	struct PipelineLayoutCreateInfo;
+
 	struct SurfaceFormatKHR;
 	struct Extent2D;
 	struct SurfaceCapabilitiesKHR;

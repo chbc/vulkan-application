@@ -11,6 +11,7 @@
 #include "Devices.h"
 #include "SwapChain.h"
 #include "RenderPass.h"
+#include "DescriptorSets.h"
 
 #include <vector>
 
@@ -25,6 +26,7 @@ private:
 	Devices devices;
 	Swapchain swapchain;
 	RenderPass renderPass;
+	DescriptorSets descriptorSets;
 
 public:
 	void init(SDLAPI& sdlApi);
@@ -43,8 +45,6 @@ private:
 	void createVertexBuffer();
 	void createIndexBuffer();
 	void createUniformBuffers();
-	void createDescriptorSetLayout();
-	void createDescriptorPool();
 	void createDescriptorSets();
 	void createCommandBuffers();
 	void recordCommandBuffer(vk::CommandBuffer commandBuffer, uint32_t imageIndex);
