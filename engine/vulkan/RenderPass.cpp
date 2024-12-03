@@ -51,7 +51,7 @@ void RenderPass::init(Devices& devices, Swapchain& swapchain)
     }
 }
 
-vk::RenderPassBeginInfo RenderPass::createInfo(Swapchain& swapchain, vk::Extent2D& extent, uint32_t imageIndex)
+vk::RenderPassBeginInfo RenderPass::createInfo(Swapchain& swapchain, const vk::Extent2D& extent, uint32_t imageIndex)
 {
     vk::Framebuffer framebuffer;
     swapchain.getFramebuffer(imageIndex, framebuffer);

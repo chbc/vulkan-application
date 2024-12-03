@@ -15,15 +15,19 @@ namespace vk
 	class Queue;
 	class RenderPass;
 	class Framebuffer;
-
+	class CommandPool;
+	class Pipeline;
+	class PipelineLayout;
 	class DescriptorSetLayout;
 	class DescriptorPool;
 	class DescriptorSet;
+	
 	struct PipelineLayoutCreateInfo;
-
 	struct SurfaceFormatKHR;
 	struct Extent2D;
 	struct SurfaceCapabilitiesKHR;
+	struct RenderPassBeginInfo;
+	struct DescriptorBufferInfo;
 
 	enum class PresentModeKHR;
 	enum class Format;

@@ -19,7 +19,7 @@ private:
     void createFramebuffers(Devices& devices, vk::RenderPass* renderPass);
     vk::SwapchainKHR* getSwapchainKHR();
     vk::Format getImageFormat();
-    vk::Extent2D getExtent();
+    const vk::Extent2D& getExtent();
     void getFramebuffer(uint32_t index, vk::Framebuffer& result);
     static SwapChainSupportDetails querySwapChainSupport(const vk::SurfaceKHR& surface, const vk::PhysicalDevice* device);
     static bool isSwapChainAdequate(const vk::SurfaceKHR& surface, const vk::PhysicalDevice* device);

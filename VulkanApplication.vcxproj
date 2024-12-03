@@ -160,12 +160,14 @@
   <ItemGroup>
     <ClCompile Include="engine\Platform.cpp" />
     <ClCompile Include="engine\sdl\SDLAPI.cpp" />
+    <ClCompile Include="engine\vulkan\CommandBuffers.cpp" />
     <ClCompile Include="engine\vulkan\DebugMessenger.cpp" />
     <ClCompile Include="engine\vulkan\DescriptorSets.cpp" />
     <ClCompile Include="engine\vulkan\Devices.cpp" />
     <ClCompile Include="engine\vulkan\RenderPass.cpp" />
     <ClCompile Include="engine\vulkan\Swapchain.cpp" />
     <ClCompile Include="engine\vulkan\ValidationLayers.cpp" />
+    <ClCompile Include="engine\vulkan\Vertex.cpp" />
     <ClCompile Include="engine\vulkan\VulkanAPI.cpp" />
     <ClCompile Include="main.cpp" />
   </ItemGroup>
@@ -173,12 +175,14 @@
     <ClInclude Include="engine\Platform.h" />
     <ClInclude Include="engine\sdl\SDLAPI.h" />
     <ClInclude Include="engine\Utils.h" />
+    <ClInclude Include="engine\vulkan\CommandBuffers.h" />
     <ClInclude Include="engine\vulkan\DebugMessenger.h" />
     <ClInclude Include="engine\vulkan\DescriptorSets.h" />
     <ClInclude Include="engine\vulkan\Devices.h" />
     <ClInclude Include="engine\vulkan\RenderPass.h" />
     <ClInclude Include="engine\vulkan\Swapchain.h" />
     <ClInclude Include="engine\vulkan\ValidationLayers.h" />
+    <ClInclude Include="engine\vulkan\Vertex.h" />
     <ClInclude Include="engine\vulkan\vk_forward_declarations.h" />
     <ClInclude Include="engine\vulkan\VulkanAPI.h" />
   </ItemGroup>

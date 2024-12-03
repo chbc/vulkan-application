@@ -125,7 +125,7 @@ vk::Format Swapchain::getImageFormat()
     return swapchainImageFormat;
 }
 
-vk::Extent2D Swapchain::getExtent()
+const vk::Extent2D& Swapchain::getExtent()
 {
     return swapchainExtent;
 }

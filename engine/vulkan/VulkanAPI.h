@@ -12,6 +12,7 @@
 #include "SwapChain.h"
 #include "RenderPass.h"
 #include "DescriptorSets.h"
+#include "CommandBuffers.h"
 
 #include <vector>
 
@@ -27,29 +28,20 @@ private:
 	Swapchain swapchain;
 	RenderPass renderPass;
 	DescriptorSets descriptorSets;
+	CommandBuffers commandBuffers;
 
 public:
 	void init(SDLAPI& sdlApi);
 	void drawFrame();
 
 private:
-	void createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, 
-		vk::MemoryPropertyFlags properties, vk::Buffer& buffer, vk::DeviceMemory& bufferMemory);
-	void copyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer, vk::DeviceSize size);
 	void createInstance();
 	std::vector<const char*> getRequiredExtensions();
 	void createSurface();
 	void createGraphicsPipeline();
-
-	void createCommandPool();
-	void createVertexBuffer();
-	void createIndexBuffer();
-	void createUniformBuffers();
+	
 	void createDescriptorSets();
-	void createCommandBuffers();
-	void recordCommandBuffer(vk::CommandBuffer commandBuffer, uint32_t imageIndex);
 	void createSyncObjects();
-	void updateUniformBuffer(uint32_t currentImage);
 	vk::ShaderModule createShaderModule(const std::vector<char>& code);
 	void preRelease();
 	void release();

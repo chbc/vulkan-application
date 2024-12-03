@@ -18,7 +18,7 @@ private:
 
 private:
 	void init(Devices& devices, Swapchain& swapchain);
-	vk::RenderPassBeginInfo createInfo(Swapchain& swapchain, vk::Extent2D& extent, uint32_t imageIndex);
+	vk::RenderPassBeginInfo createInfo(Swapchain& swapchain, const vk::Extent2D& extent, uint32_t imageIndex);
 	vk::RenderPass* getRenderPassRef();
 	void release(vk::Device* logicalDevice);
 

@@ -8,147 +8,19 @@
 #include <iostream>
 #include <array>
 
-#define GLM_FORMCE_RADIANS
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-
-#include <chrono>
-
-struct Vertex
-{
-    glm::vec2 pos;
-    glm::vec3 color;
-
-    static vk::VertexInputBindingDescription getBindingDescription()
-    {
-        vk::VertexInputBindingDescription bindingDescription = vk::VertexInputBindingDescription()
-            .setBinding(0)
-            .setStride(sizeof(Vertex))
-            .setInputRate(vk::VertexInputRate::eVertex);
-
-        return bindingDescription;
-    }
-
-    static std::array<vk::VertexInputAttributeDescription, 2> getAttributeDescriptions()
-    {
-        std::array<vk::VertexInputAttributeDescription, 2> attributeDescriptions;
-
-        attributeDescriptions[0]
-            .setBinding(0)
-            .setLocation(0)
-            .setFormat(vk::Format::eR32G32Sfloat)
-            .setOffset(offsetof(Vertex, pos));
-
-        attributeDescriptions[1]
-            .setBinding(0)
-            .setLocation(1)
-            .setFormat(vk::Format::eR32G32B32Sfloat)
-            .setOffset(offsetof(Vertex, color));
-
-        return attributeDescriptions;
-    }
-};
-
-struct UniformBufferObject
-{
-    glm::mat4 model;
-    glm::mat4 view;
-    glm::mat4 proj;
-};
-
-const std::vector<Vertex> vertices =
-{
-    {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-    {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
-    {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
-    {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}
-};
-
-const std::vector<uint16_t> indices = { 0, 1, 2, 2, 3, 0 };
-
 vk::SurfaceKHR surface = nullptr;
 vk::Instance instance = nullptr;
 
-vk::Queue graphicsQueue;
-vk::Queue presentQueue;
+const int MAX_FRAMES_IN_FLIGHT = 2;
 
 vk::PipelineLayout pipelineLayout;
 vk::Pipeline graphicsPipeline;
 
-vk::CommandPool commandPool;
-std::vector<vk::CommandBuffer> commandBuffers;
 std::vector<vk::Semaphore> imageAvailableSemaphores;
 std::vector<vk::Semaphore> renderFinishedSemaphores;
 std::vector<vk::Fence> inFlightFences;
-const int MAX_FRAMES_IN_FLIGHT = 2;
-uint32_t currentFrame = 0;
+
 bool framebufferResized = false;
-vk::Buffer vertexBuffer;
-vk::DeviceMemory vertexBufferMemory;
-vk::Buffer indexBuffer;
-vk::DeviceMemory indexBufferMemory;
-
-std::vector<vk::Buffer> uniformBuffers;
-std::vector<vk::DeviceMemory> uniformBuffersMemory;
-std::vector<void*> uniformBuffersMapped;
-
-
-void VulkanAPI::createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties,
-    vk::Buffer& buffer, vk::DeviceMemory& bufferMemory)
-{
-    vk::BufferCreateInfo bufferInfo = vk::BufferCreateInfo()
-        .setSize(size)
-        .setUsage(usage)
-        .setSharingMode(vk::SharingMode::eExclusive);
-
-    vk::Device* logicalDevice = this->devices.getDevice();
-    buffer = logicalDevice->createBuffer(bufferInfo);
-
-    vk::MemoryRequirements memRequirements = logicalDevice->getBufferMemoryRequirements(buffer);
-
-    vk::MemoryAllocateInfo allocInfo = vk::MemoryAllocateInfo()
-        .setAllocationSize(memRequirements.size)
-        .setMemoryTypeIndex(this->devices.findMemoryType(memRequirements.memoryTypeBits, properties));
-
-    bufferMemory = logicalDevice->allocateMemory(allocInfo);
-    logicalDevice->bindBufferMemory(buffer, bufferMemory, 0);
-}
-
-void VulkanAPI::copyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer, vk::DeviceSize size)
-{
-    vk::CommandBufferAllocateInfo allocInfo = vk::CommandBufferAllocateInfo()
-        .setLevel(vk::CommandBufferLevel::ePrimary)
-        .setCommandPool(commandPool)
-        .setCommandBufferCount(1);
-    
-    vk::Device* logicalDevice = this->devices.getDevice();
-    vk::CommandBuffer commandBuffer;
-    if (logicalDevice->allocateCommandBuffers(&allocInfo, &commandBuffer) != vk::Result::eSuccess)
-    {
-        throw std::runtime_error("Failed to allocate command buffer!");
-    }
-
-    vk::CommandBufferBeginInfo beginInfo = vk::CommandBufferBeginInfo()
-        .setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
-
-    commandBuffer.begin(beginInfo);
-
-    vk::BufferCopy copyRegion = vk::BufferCopy()
-        .setSrcOffset(0).setDstOffset(0)
-        .setSize(size);
-
-    commandBuffer.copyBuffer(srcBuffer, dstBuffer, 1, &copyRegion);
-    commandBuffer.end();
-
-    vk::SubmitInfo submitInfo = vk::SubmitInfo()
-        .setCommandBufferCount(1)
-        .setPCommandBuffers(&commandBuffer);
-
-    graphicsQueue.submit(submitInfo);
-    graphicsQueue.waitIdle();
-
-    logicalDevice->freeCommandBuffers(commandPool, commandBuffer);
-}
 
 void VulkanAPI::init(SDLAPI& sdlApi)
 {
@@ -158,7 +30,6 @@ void VulkanAPI::init(SDLAPI& sdlApi)
     this->debugMessenger.init(instance, nullptr);
     createSurface();
     this->devices.init(instance, surface, this->validationLayers);
-    this->devices.getQueues(graphicsQueue, presentQueue);
     this->swapchain.init(surface, this->sdlApi->window, this->devices);
     this->swapchain.createImageViews(this->devices);
     this->renderPass.init(this->devices, this->swapchain);
@@ -168,18 +39,16 @@ void VulkanAPI::init(SDLAPI& sdlApi)
     this->descriptorSets.initLayout(logicalDevice);
     createGraphicsPipeline();
     this->swapchain.createFramebuffers(devices, this->renderPass.getRenderPassRef());
-    createCommandPool();
-    createVertexBuffer();
-    createIndexBuffer();
-    createUniformBuffers();
+    this->commandBuffers.init(surface, this->devices, MAX_FRAMES_IN_FLIGHT);
     this->descriptorSets.initPool(logicalDevice);
     createDescriptorSets();
-    createCommandBuffers();
+    this->commandBuffers.createCommandBuffers(this->devices, MAX_FRAMES_IN_FLIGHT);
     createSyncObjects();
 }
 
 void VulkanAPI::drawFrame()
 {
+    uint32_t currentFrame = this->commandBuffers.getCurrentFrameIndex();
     vk::Device* logicalDevice = this->devices.getDevice();
     if (logicalDevice->waitForFences(1, &inFlightFences[currentFrame], vk::True, UINT64_MAX) != vk::Result::eSuccess)
     {
@@ -204,10 +73,13 @@ void VulkanAPI::drawFrame()
         throw std::runtime_error("drawFrame() - Couldn't reset fence!");
     }
 
-    updateUniformBuffer(currentFrame);
+    const vk::Extent2D& swapchainExtent = this->swapchain.getExtent();
+    this->commandBuffers.updateUniformBuffer(swapchainExtent);
 
-    commandBuffers[currentFrame].reset();
-    recordCommandBuffer(commandBuffers[currentFrame], imageIndex.value);
+    const vk::RenderPassBeginInfo& renderPassInfo = this->renderPass.createInfo(this->swapchain, swapchainExtent, imageIndex.value);
+    this->commandBuffers.recordCommandBuffer(swapchainExtent, renderPassInfo, graphicsPipeline,
+        pipelineLayout, this->descriptorSets.getDescriptorSet());
+    const vk::CommandBuffer* commandBuffer = this->commandBuffers.getCurrentCommandBuffer();
 
     vk::Semaphore waitSemaphores[] = { imageAvailableSemaphores[currentFrame] };
     vk::Semaphore signalSemaphores[] = { renderFinishedSemaphores[currentFrame] };
@@ -218,11 +90,14 @@ void VulkanAPI::drawFrame()
         .setPWaitSemaphores(waitSemaphores)
         .setPWaitDstStageMask(waitStages)
         .setCommandBufferCount(1)
-        .setPCommandBuffers(&commandBuffers[currentFrame])
+        .setPCommandBuffers(commandBuffer)
         .setSignalSemaphoreCount(1)
         .setPSignalSemaphores(signalSemaphores);
 
-    if (graphicsQueue.submit(1, &submitInfo, inFlightFences[currentFrame]) != vk::Result::eSuccess)
+    const vk::Queue* graphicsQueue = this->devices.getGraphicsQueue();
+    const vk::Queue* presentQueue = this->devices.getPresentQueue();
+
+    if (graphicsQueue->submit(1, &submitInfo, inFlightFences[currentFrame]) != vk::Result::eSuccess)
     {
         throw std::runtime_error("Failed to submit draw command buffer!");
     }
@@ -237,7 +112,7 @@ void VulkanAPI::drawFrame()
         .setPImageIndices(&imageIndex.value)
         .setPResults(nullptr);
 
-    vk::Result result = presentQueue.presentKHR(&presentInfo);
+    vk::Result result = presentQueue->presentKHR(&presentInfo);
 
     if ((result == vk::Result::eErrorOutOfDateKHR) || (result != vk::Result::eSuboptimalKHR) || framebufferResized)
     {
@@ -249,7 +124,7 @@ void VulkanAPI::drawFrame()
         throw std::runtime_error("Failed to present swap chain image!");
     }
 
-    currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+    this->commandBuffers.increaseFrame(MAX_FRAMES_IN_FLIGHT);
 }
 
 std::vector<const char*> VulkanAPI::getRequiredExtensions()
@@ -448,79 +323,6 @@ void VulkanAPI::createGraphicsPipeline()
     logicalDevice->destroyShaderModule(fragShaderModule);
 }
 
-void VulkanAPI::createCommandPool()
-{
-    QueueFamilyIndices queueFamilyIndices = this->devices.findQueueFamilies(surface);
-
-    vk::CommandPoolCreateInfo poolInfo = vk::CommandPoolCreateInfo()
-        .setFlags(vk::CommandPoolCreateFlagBits::eResetCommandBuffer)
-        .setQueueFamilyIndex(queueFamilyIndices.graphicsFamily.value());
-
-    commandPool = this->devices.getDevice()->createCommandPool(poolInfo);
-}
-
-void VulkanAPI::createVertexBuffer()
-{
-    vk::Device* logicalDevice = this->devices.getDevice();
-    vk::DeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
-
-    vk::Buffer stagingBuffer;
-    vk::DeviceMemory stagingBufferMemory;
-    createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferSrc,
-        vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, stagingBuffer, stagingBufferMemory);
-
-    void* data = logicalDevice->mapMemory(stagingBufferMemory, 0, bufferSize);
-    memcpy(data, vertices.data(), (size_t)bufferSize);
-    logicalDevice->unmapMemory(stagingBufferMemory);
-
-    createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer,
-        vk::MemoryPropertyFlagBits::eDeviceLocal, vertexBuffer, vertexBufferMemory);
-
-    copyBuffer(stagingBuffer, vertexBuffer, bufferSize);
-
-    logicalDevice->destroyBuffer(stagingBuffer);
-    logicalDevice->freeMemory(stagingBufferMemory);
-}
-
-void VulkanAPI::createIndexBuffer()
-{
-    vk::DeviceSize bufferSize = sizeof(indices[0]) * indices.size();
-    vk::Buffer stagingBuffer;
-    vk::DeviceMemory stagingBufferMemory;
-    createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferSrc,
-        vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, stagingBuffer, stagingBufferMemory);
-
-    vk::Device* logicalDevice = this->devices.getDevice();
-    void* data = logicalDevice->mapMemory(stagingBufferMemory, 0, bufferSize);
-    memcpy(data, indices.data(), (size_t)bufferSize);
-    logicalDevice->unmapMemory(stagingBufferMemory);
-
-    createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer,
-        vk::MemoryPropertyFlagBits::eDeviceLocal, indexBuffer, indexBufferMemory);
-
-    copyBuffer(stagingBuffer, indexBuffer, bufferSize);
-
-    logicalDevice->destroyBuffer(stagingBuffer);
-    logicalDevice->freeMemory(stagingBufferMemory);
-}
-
-void VulkanAPI::createUniformBuffers()
-{
-    vk::DeviceSize bufferSize = sizeof(UniformBufferObject);
-
-    uniformBuffers.resize(MAX_FRAMES_IN_FLIGHT);
-    uniformBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT);
-    uniformBuffersMapped.resize(MAX_FRAMES_IN_FLIGHT);
-
-    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
-    {
-        createBuffer(bufferSize, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible |
-            vk::MemoryPropertyFlagBits::eHostCoherent, uniformBuffers[i], uniformBuffersMemory[i]);
-
-        uniformBuffersMapped[i] = this->devices.getDevice()->mapMemory(uniformBuffersMemory[i], 0, bufferSize);
-    }
-}
-
 void VulkanAPI::createDescriptorSets()
 {
     vk::Device* logicalDevice = this->devices.getDevice();
@@ -529,62 +331,10 @@ void VulkanAPI::createDescriptorSets()
     vk::DescriptorSet* descriptorSet = this->descriptorSets.getDescriptorSet();
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
     {
-        vk::DescriptorBufferInfo descriptorBufferInfo{ uniformBuffers[i], 0, sizeof(UniformBufferObject) };
+        vk::DescriptorBufferInfo descriptorBufferInfo = this->commandBuffers.createDescriptorBufferInfo(i);
         vk::WriteDescriptorSet writeDescriptorSet{ *descriptorSet, 0, 0, vk::DescriptorType::eUniformBuffer, {}, descriptorBufferInfo };
         logicalDevice->updateDescriptorSets(writeDescriptorSet, nullptr);
     }
-}
-
-void VulkanAPI::createCommandBuffers()
-{
-    commandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
-
-    vk::CommandBufferAllocateInfo allocInfo = vk::CommandBufferAllocateInfo()
-        .setCommandPool(commandPool)
-        .setLevel(vk::CommandBufferLevel::ePrimary)
-        .setCommandBufferCount(static_cast<uint32_t>(commandBuffers.size()));
-
-    commandBuffers = this->devices.getDevice()->allocateCommandBuffers(allocInfo);
-    
-    if (commandBuffers.empty())
-    {
-        throw std::runtime_error("Couldn't allocate command buffer!");
-    }
-}
-
-void VulkanAPI::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint32_t imageIndex)
-{
-    vk::CommandBufferBeginInfo beginInfo;
-
-    commandBuffer.begin(beginInfo);
-
-    vk::Extent2D swapchainExtent = this->swapchain.getExtent();
-    vk::RenderPassBeginInfo renderPassInfo = this->renderPass.createInfo(this->swapchain, swapchainExtent, imageIndex);
-
-    commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
-    commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
-
-    vk::Viewport viewport = vk::Viewport()
-        .setX(0.0f).setY(0.0f)
-        .setWidth(static_cast<float>(swapchainExtent.width))
-        .setHeight(static_cast<float>(swapchainExtent.height))
-        .setMinDepth(0.0f)
-        .setMaxDepth(1.0f);
-
-    commandBuffer.setViewport(0, 1, &viewport);
-
-    vk::Rect2D scissor{ {0, 0}, swapchainExtent };
-    commandBuffer.setScissor(0, 1, &scissor);
-
-    vk::Buffer vertexBuffers[] = { vertexBuffer };
-    vk::DeviceSize offsets[] = { 0 };
-    commandBuffer.bindVertexBuffers(0, vertexBuffers, offsets);
-    commandBuffer.bindIndexBuffer(indexBuffer, 0, vk::IndexType::eUint16);
-
-    commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0, 1, this->descriptorSets.getDescriptorSet(), 0, nullptr);
-    commandBuffer.drawIndexed(static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
-    commandBuffer.endRenderPass();
-    commandBuffer.end();
 }
 
 void VulkanAPI::createSyncObjects()
@@ -606,23 +356,6 @@ void VulkanAPI::createSyncObjects()
     }
 }
 
-void VulkanAPI::updateUniformBuffer(uint32_t currentImage)
-{
-    static auto startTime = std::chrono::high_resolution_clock::now();
-
-    auto currentTime = std::chrono::high_resolution_clock::now();
-    float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
-
-    vk::Extent2D swapchainExtent = this->swapchain.getExtent();
-    UniformBufferObject ubo;
-    ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-    ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-    ubo.proj = glm::perspective(glm::radians(45.0f), swapchainExtent.width / (float)swapchainExtent.height, 0.1f, 10.0f);
-    ubo.proj[1][1] *= -1.0f;
-
-    memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
-}
-
 vk::ShaderModule VulkanAPI::createShaderModule(const std::vector<char>& code)
 {
     vk::ShaderModuleCreateInfo createInfo = vk::ShaderModuleCreateInfo()
@@ -642,17 +375,10 @@ void VulkanAPI::preRelease()
         logicalDevice->waitIdle();
         this->swapchain.release(this->devices);
 
-        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
-        {
-            logicalDevice->destroyBuffer(uniformBuffers[i]);
-            logicalDevice->freeMemory(uniformBuffersMemory[i]);
-        }
+        this->commandBuffers.releaseUniformBuffers(logicalDevice, MAX_FRAMES_IN_FLIGHT);
 
         this->descriptorSets.release(logicalDevice);
-        logicalDevice->destroyBuffer(indexBuffer);
-        logicalDevice->freeMemory(indexBufferMemory);
-        logicalDevice->destroyBuffer(vertexBuffer);
-        logicalDevice->freeMemory(vertexBufferMemory);
+        this->commandBuffers.release(logicalDevice);
         logicalDevice->destroyPipeline(graphicsPipeline);
         logicalDevice->destroyPipelineLayout(pipelineLayout);
         this->renderPass.release(logicalDevice);
@@ -664,7 +390,7 @@ void VulkanAPI::preRelease()
             logicalDevice->destroyFence(inFlightFences[i]);
         }
 
-        logicalDevice->destroyCommandPool(commandPool);
+        // XXX this->commandBuffers.release(logicalDevice);
         logicalDevice->destroy();
         debugMessenger.release(instance, nullptr);
         if (surface != nullptr)

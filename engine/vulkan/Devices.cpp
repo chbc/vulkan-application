@@ -26,12 +26,12 @@ void Devices::pickPhysicalDevice(const vk::Instance& instance, const vk::Surface
     {
         if (isDeviceSuitable(surface, device))
         {
-            physicalDevice.reset(new vk::PhysicalDevice{ device });
+            this->physicalDevice.reset(new vk::PhysicalDevice{ device });
             break;
         }
     }
 
-    if (!physicalDevice)
+    if (!this->physicalDevice)
     {
         throw std::runtime_error("failed to find a suitable GPU!");
     }
@@ -61,12 +61,17 @@ void Devices::createLogicalDevice(const ValidationLayers& validationLayers)
         .setPEnabledExtensionNames(deviceExtensions)
         .setPEnabledLayerNames(validationLayers.getData());
 
-    logicalDevice.reset(new vk::Device{ physicalDevice->createDevice(createInfo) });
+    this->logicalDevice.reset(new vk::Device{ physicalDevice->createDevice(createInfo) });
 
-    if (!logicalDevice)
+    if (!this->logicalDevice)
     {
         throw std::runtime_error("failed to create logical device!");
     }
+
+    vk::Queue graphicsQueueValue = this->logicalDevice->getQueue(familyIndices.graphicsFamily.value(), 0);
+    vk::Queue presentQueueValue = this->logicalDevice->getQueue(familyIndices.presentFamily.value(), 0);
+    this->graphicsQueue = std::make_shared<vk::Queue>(graphicsQueueValue);
+    this->presentQueue = std::make_shared<vk::Queue>(presentQueueValue);
 }
 
 vk::Device* Devices::getDevice()
@@ -79,10 +84,14 @@ vk::PhysicalDevice* Devices::getPhysicalDevice()
     return this->physicalDevice.get();
 }
 
-void Devices::getQueues(vk::Queue& graphics, vk::Queue& present)
+const vk::Queue* Devices::getGraphicsQueue()
 {
-    graphics = this->logicalDevice->getQueue(familyIndices.graphicsFamily.value(), 0);
-    present = this->logicalDevice->getQueue(familyIndices.presentFamily.value(), 0);
+    return this->graphicsQueue.get();
+}
+
+const vk::Queue* Devices::getPresentQueue()
+{
+    return this->presentQueue.get();
 }
 
 uint32_t Devices::findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties)
