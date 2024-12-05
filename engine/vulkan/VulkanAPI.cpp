@@ -8,6 +8,9 @@
 #include <iostream>
 #include <array>
 
+#define STB_IMAGE_IMPLEMENTATION
+#include "dependencies/stb_image.h"
+
 vk::SurfaceKHR surface = nullptr;
 vk::Instance instance = nullptr;
 
@@ -16,13 +19,16 @@ const int MAX_FRAMES_IN_FLIGHT = 2;
 vk::PipelineLayout pipelineLayout;
 vk::Pipeline graphicsPipeline;
 
+vk::Image textureImage;
+vk::DeviceMemory textureImageMemory;
+
 void VulkanAPI::init(SDLAPI& sdlApi)
 {
     this->sdlApi = &sdlApi;
 
-    createInstance();
+    this->createInstance();
     this->debugMessenger.init(instance, nullptr);
-    createSurface();
+    this->createSurface();
     this->devices.init(instance, surface, this->validationLayers);
     this->swapchain.init(surface, this->sdlApi->window, this->devices);
     this->swapchain.createImageViews(this->devices);
@@ -31,12 +37,13 @@ void VulkanAPI::init(SDLAPI& sdlApi)
     vk::Device* logicalDevice = this->devices.getDevice();
 
     this->descriptorSets.initLayout(logicalDevice);
-    createGraphicsPipeline();
+    this->createGraphicsPipeline();
     this->swapchain.createFramebuffers(devices, this->renderPass.getRenderPassRef());
     this->commandBuffers.init(surface, this->devices, MAX_FRAMES_IN_FLIGHT);
     this->descriptorSets.initPool(logicalDevice);
-    createDescriptorSets();
+    this->createDescriptorSets();
     this->commandBuffers.createCommandBuffers(this->devices, MAX_FRAMES_IN_FLIGHT);
+    this->createTextureImage();
     this->syncObjects.init(logicalDevice, MAX_FRAMES_IN_FLIGHT);
 }
 
@@ -181,6 +188,55 @@ void VulkanAPI::createInstance()
         throw std::exception(message);
         
     }
+}
+
+void VulkanAPI::createTextureImage()
+{
+    int textWidth, textHeight, textChannels;
+    stbi_uc* pixels = stbi_load("../../textures/texture.jpg", &textWidth, &textHeight, &textChannels, STBI_rgb_alpha);
+    vk::DeviceSize imageSize = textWidth * textHeight * 4;
+
+    if (!pixels)
+    {
+        throw std::runtime_error("Failed to load texture image!");
+    }
+
+    vk::Buffer stagingBuffer;
+    vk::DeviceMemory stagingBufferMemory;
+    this->commandBuffers.createBuffer(this->devices, imageSize, vk::BufferUsageFlagBits::eTransferSrc,
+        vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, stagingBuffer, stagingBufferMemory);
+
+    vk::Device* logicalDevice = this->devices.getDevice();
+    void* data = logicalDevice->mapMemory(stagingBufferMemory, 0, imageSize);
+    memcpy(data, pixels, static_cast<size_t>(imageSize));
+    logicalDevice->unmapMemory(stagingBufferMemory);
+
+    stbi_image_free(pixels);
+
+    vk::ImageCreateInfo imageInfo = vk::ImageCreateInfo()
+        .setImageType(vk::ImageType::e2D)
+        .setExtent(vk::Extent3D{ textWidth, textHeight, 1 })
+        .setMipLevels(1)
+        .setArrayLayers(1)
+        .setFormat(vk::Format::eR8G8B8A8Srgb)
+        .setTiling(vk::ImageTiling::eOptimal)
+        .setInitialLayout(vk::ImageLayout::eUndefined)
+        .setUsage(vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled)
+        .setSharingMode(vk::SharingMode::eExclusive)
+        .setSamples(vk::SampleCountFlagBits::e1);
+
+    if (logicalDevice->createImage(&imageInfo, nullptr, &textureImage) != vk::Result::eSuccess)
+    {
+        throw std::runtime_error("Failed to create image!");
+    }
+
+    vk::MemoryRequirements memRequirements = logicalDevice->getImageMemoryRequirements(textureImage);
+    vk::MemoryAllocateInfo allocInfo = vk::MemoryAllocateInfo()
+        .setAllocationSize(memRequirements.size)
+        .setMemoryTypeIndex(this->devices.findMemoryType(memRequirements.memoryTypeBits, vk::MemoryPropertyFlagBits::eDeviceLocal));
+
+    textureImageMemory = logicalDevice->allocateMemory(allocInfo, nullptr);
+    logicalDevice->bindImageMemory(textureImage, textureImageMemory, 0);
 }
 
 void VulkanAPI::createSurface()
