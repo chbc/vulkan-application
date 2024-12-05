@@ -166,6 +166,7 @@
     <ClCompile Include="engine\vulkan\Devices.cpp" />
     <ClCompile Include="engine\vulkan\RenderPass.cpp" />
     <ClCompile Include="engine\vulkan\Swapchain.cpp" />
+    <ClCompile Include="engine\vulkan\SyncObjects.cpp" />
     <ClCompile Include="engine\vulkan\ValidationLayers.cpp" />
     <ClCompile Include="engine\vulkan\Vertex.cpp" />
     <ClCompile Include="engine\vulkan\VulkanAPI.cpp" />
@@ -181,6 +182,7 @@
     <ClInclude Include="engine\vulkan\Devices.h" />
     <ClInclude Include="engine\vulkan\RenderPass.h" />
     <ClInclude Include="engine\vulkan\Swapchain.h" />
+    <ClInclude Include="engine\vulkan\SyncObjects.h" />
     <ClInclude Include="engine\vulkan\ValidationLayers.h" />
     <ClInclude Include="engine\vulkan\Vertex.h" />
     <ClInclude Include="engine\vulkan\vk_forward_declarations.h" />

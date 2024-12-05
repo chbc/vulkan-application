@@ -13,6 +13,7 @@
 #include "RenderPass.h"
 #include "DescriptorSets.h"
 #include "CommandBuffers.h"
+#include "SyncObjects.h"
 
 #include <vector>
 
@@ -29,6 +30,9 @@ private:
 	RenderPass renderPass;
 	DescriptorSets descriptorSets;
 	CommandBuffers commandBuffers;
+	SyncObjects syncObjects;
+
+	bool framebufferResized = false;
 
 public:
 	void init(SDLAPI& sdlApi);
@@ -41,7 +45,6 @@ private:
 	void createGraphicsPipeline();
 	
 	void createDescriptorSets();
-	void createSyncObjects();
 	vk::ShaderModule createShaderModule(const std::vector<char>& code);
 	void preRelease();
 	void release();

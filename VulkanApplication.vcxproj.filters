@@ -52,6 +52,9 @@
     <ClCompile Include="engine\vulkan\Vertex.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="engine\vulkan\SyncObjects.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="engine\vulkan\VulkanAPI.h">
@@ -91,6 +94,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="engine\vulkan\Vertex.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="engine\vulkan\SyncObjects.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

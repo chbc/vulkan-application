@@ -16,12 +16,6 @@ const int MAX_FRAMES_IN_FLIGHT = 2;
 vk::PipelineLayout pipelineLayout;
 vk::Pipeline graphicsPipeline;
 
-std::vector<vk::Semaphore> imageAvailableSemaphores;
-std::vector<vk::Semaphore> renderFinishedSemaphores;
-std::vector<vk::Fence> inFlightFences;
-
-bool framebufferResized = false;
-
 void VulkanAPI::init(SDLAPI& sdlApi)
 {
     this->sdlApi = &sdlApi;
@@ -43,20 +37,19 @@ void VulkanAPI::init(SDLAPI& sdlApi)
     this->descriptorSets.initPool(logicalDevice);
     createDescriptorSets();
     this->commandBuffers.createCommandBuffers(this->devices, MAX_FRAMES_IN_FLIGHT);
-    createSyncObjects();
+    this->syncObjects.init(logicalDevice, MAX_FRAMES_IN_FLIGHT);
 }
 
 void VulkanAPI::drawFrame()
 {
     uint32_t currentFrame = this->commandBuffers.getCurrentFrameIndex();
     vk::Device* logicalDevice = this->devices.getDevice();
-    if (logicalDevice->waitForFences(1, &inFlightFences[currentFrame], vk::True, UINT64_MAX) != vk::Result::eSuccess)
-    {
-        throw std::runtime_error("drawFrame() - Couldn't wait for fence!");
-    }
+    this->syncObjects.waitForFence(logicalDevice, currentFrame);
 
     vk::SwapchainKHR* swapchainKHR = swapchain.getSwapchainKHR();
-    vk::ResultValue<uint32_t> imageIndex = logicalDevice->acquireNextImageKHR(*swapchainKHR, UINT64_MAX, imageAvailableSemaphores[currentFrame]);
+    const vk::Semaphore& currentImageSemaphore = this->syncObjects.getImageSemaphore(currentFrame);
+    const vk::Semaphore& currentRenderSemaphore = this->syncObjects.getRenderSemaphore(currentFrame);
+    vk::ResultValue<uint32_t> imageIndex = logicalDevice->acquireNextImageKHR(*swapchainKHR, UINT64_MAX, currentImageSemaphore);
 
     if (imageIndex.result == vk::Result::eErrorOutOfDateKHR)
     {
@@ -68,10 +61,7 @@ void VulkanAPI::drawFrame()
         throw std::runtime_error("Failed to acquire swap chain image!");
     }
 
-    if (logicalDevice->resetFences(1, &inFlightFences[currentFrame]) != vk::Result::eSuccess)
-    {
-        throw std::runtime_error("drawFrame() - Couldn't reset fence!");
-    }
+    this->syncObjects.resetFence(logicalDevice, currentFrame);
 
     const vk::Extent2D& swapchainExtent = this->swapchain.getExtent();
     this->commandBuffers.updateUniformBuffer(swapchainExtent);
@@ -81,8 +71,8 @@ void VulkanAPI::drawFrame()
         pipelineLayout, this->descriptorSets.getDescriptorSet());
     const vk::CommandBuffer* commandBuffer = this->commandBuffers.getCurrentCommandBuffer();
 
-    vk::Semaphore waitSemaphores[] = { imageAvailableSemaphores[currentFrame] };
-    vk::Semaphore signalSemaphores[] = { renderFinishedSemaphores[currentFrame] };
+    vk::Semaphore waitSemaphores[] = { currentImageSemaphore };
+    vk::Semaphore signalSemaphores[] = { currentRenderSemaphore };
     vk::PipelineStageFlags waitStages[] = { vk::PipelineStageFlagBits::eColorAttachmentOutput };
 
     vk::SubmitInfo submitInfo = vk::SubmitInfo()
@@ -97,18 +87,17 @@ void VulkanAPI::drawFrame()
     const vk::Queue* graphicsQueue = this->devices.getGraphicsQueue();
     const vk::Queue* presentQueue = this->devices.getPresentQueue();
 
-    if (graphicsQueue->submit(1, &submitInfo, inFlightFences[currentFrame]) != vk::Result::eSuccess)
+    const vk::Fence& inFlightFence = this->syncObjects.getInFlightFence(currentFrame);
+    if (graphicsQueue->submit(1, &submitInfo, inFlightFence) != vk::Result::eSuccess)
     {
         throw std::runtime_error("Failed to submit draw command buffer!");
     }
-
-    vk::SwapchainKHR swapChains[] = { *swapchainKHR };
 
     vk::PresentInfoKHR presentInfo = vk::PresentInfoKHR()
         .setWaitSemaphoreCount(1)
         .setPWaitSemaphores(signalSemaphores)
         .setSwapchainCount(1)
-        .setPSwapchains(swapChains)
+        .setPSwapchains(swapchainKHR)
         .setPImageIndices(&imageIndex.value)
         .setPResults(nullptr);
 
@@ -337,25 +326,6 @@ void VulkanAPI::createDescriptorSets()
     }
 }
 
-void VulkanAPI::createSyncObjects()
-{
-    vk::SemaphoreCreateInfo semaphoreInfo;
-    vk::FenceCreateInfo fenceInfo = vk::FenceCreateInfo()
-        .setFlags(vk::FenceCreateFlagBits::eSignaled);
-
-    imageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
-    renderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
-    inFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
-
-    vk::Device* logicalDevice = this->devices.getDevice();
-    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
-    {
-        imageAvailableSemaphores[i] = logicalDevice->createSemaphore(semaphoreInfo);
-        renderFinishedSemaphores[i] = logicalDevice->createSemaphore(semaphoreInfo);
-        inFlightFences[i] = logicalDevice->createFence(fenceInfo);
-    }
-}
-
 vk::ShaderModule VulkanAPI::createShaderModule(const std::vector<char>& code)
 {
     vk::ShaderModuleCreateInfo createInfo = vk::ShaderModuleCreateInfo()
@@ -383,14 +353,8 @@ void VulkanAPI::preRelease()
         logicalDevice->destroyPipelineLayout(pipelineLayout);
         this->renderPass.release(logicalDevice);
 
-        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
-        {
-            logicalDevice->destroySemaphore(renderFinishedSemaphores[i]);
-            logicalDevice->destroySemaphore(imageAvailableSemaphores[i]);
-            logicalDevice->destroyFence(inFlightFences[i]);
-        }
+        this->syncObjects.release(logicalDevice, MAX_FRAMES_IN_FLIGHT);
 
-        // XXX this->commandBuffers.release(logicalDevice);
         logicalDevice->destroy();
         debugMessenger.release(instance, nullptr);
         if (surface != nullptr)
