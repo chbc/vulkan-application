@@ -173,6 +173,7 @@
     <ClCompile Include="main.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="dependencies\stb_image.h" />
     <ClInclude Include="engine\Platform.h" />
     <ClInclude Include="engine\sdl\SDLAPI.h" />
     <ClInclude Include="engine\Utils.h" />

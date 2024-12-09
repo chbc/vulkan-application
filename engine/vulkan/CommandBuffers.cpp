@@ -2,6 +2,10 @@
 #include "Devices.h"
 
 #include <vulkan/vulkan.hpp>
+
+#define STB_IMAGE_IMPLEMENTATION
+#include "dependencies/stb_image.h"
+
 #include <chrono>
 
 struct UniformBufferObject
@@ -20,20 +24,158 @@ std::vector<vk::Buffer> uniformBuffers;
 std::vector<vk::DeviceMemory> uniformBuffersMemory;
 std::vector<void*> uniformBuffersMapped;
 
+vk::Image textureImage;
+vk::DeviceMemory textureImageMemory;
+
 void CommandBuffers::init(const vk::SurfaceKHR& surface, Devices& devices, int maxFramesInFlight)
 {
     QueueFamilyIndices queueFamilyIndices = devices.findQueueFamilies(surface);
 
-    vk::CommandPoolCreateInfo poolInfo = vk::CommandPoolCreateInfo()
-        .setFlags(vk::CommandPoolCreateFlagBits::eResetCommandBuffer)
-        .setQueueFamilyIndex(queueFamilyIndices.graphicsFamily.value());
-
-    vk::CommandPool commandPoolValue = devices.getDevice()->createCommandPool(poolInfo);
-    this->commandPool = std::make_shared<vk::CommandPool>(commandPoolValue);
-
+    vk::Device* logicalDevice = devices.getDevice();
+    this->createCommandPool(logicalDevice, queueFamilyIndices.graphicsFamily.value());
+    this->createTextureImage(devices);
     this->createVertexBuffer(devices);
     this->createIndexBuffer(devices);
     this->createUniformBuffers(devices, maxFramesInFlight);
+}
+
+void CommandBuffers::createCommandPool(vk::Device* logicalDevice, uint32_t queueFamilyIndex)
+{
+    vk::CommandPoolCreateInfo poolInfo = vk::CommandPoolCreateInfo()
+        .setFlags(vk::CommandPoolCreateFlagBits::eResetCommandBuffer)
+        .setQueueFamilyIndex(queueFamilyIndex);
+    vk::CommandPool commandPoolValue = logicalDevice->createCommandPool(poolInfo);
+    this->commandPool = std::make_shared<vk::CommandPool>(commandPoolValue);
+}
+
+void CommandBuffers::createTextureImage(Devices& devices)
+{
+    int texWidth, texHeight, texChannels;
+    stbi_uc* pixels = stbi_load("../../textures/texture.jpg", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+    vk::DeviceSize imageSize = texWidth * texHeight * 4;
+
+    if (!pixels)
+    {
+        throw std::runtime_error("Failed to load texture image!");
+    }
+
+    vk::Buffer stagingBuffer;
+    vk::DeviceMemory stagingBufferMemory;
+    this->createBuffer(devices, imageSize, vk::BufferUsageFlagBits::eTransferSrc,
+        vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, stagingBuffer, stagingBufferMemory);
+
+    vk::Device* logicalDevice = devices.getDevice();
+    void* data = logicalDevice->mapMemory(stagingBufferMemory, 0, imageSize);
+    memcpy(data, pixels, static_cast<size_t>(imageSize));
+    logicalDevice->unmapMemory(stagingBufferMemory);
+
+    stbi_image_free(pixels);
+
+    createImage(devices, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight), vk::Format::eR8G8B8A8Srgb, vk::ImageTiling::eOptimal,
+        vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal,
+        textureImage, textureImageMemory);
+
+    this->transitionImageLayout(devices, textureImage, vk::Format::eR8G8B8A8Srgb, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
+    this->copyBufferToImage(devices, stagingBuffer, textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
+    this->transitionImageLayout(devices, textureImage, vk::Format::eR8G8B8A8Srgb, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
+
+    logicalDevice->destroyBuffer(stagingBuffer);
+    logicalDevice->freeMemory(stagingBufferMemory);
+}
+
+void CommandBuffers::createImage(Devices& devices, uint32_t widith, uint32_t height, vk::Format format, vk::ImageTiling tiling,
+    vk::ImageUsageFlags usage, vk::MemoryPropertyFlags properties, vk::Image& image, vk::DeviceMemory& imageMemory)
+{
+    vk::ImageCreateInfo imageInfo = vk::ImageCreateInfo()
+        .setImageType(vk::ImageType::e2D)
+        .setExtent(vk::Extent3D{ static_cast<uint32_t>(widith), static_cast<uint32_t>(height), 1 })
+        .setMipLevels(1)
+        .setArrayLayers(1)
+        .setFormat(format)
+        .setTiling(tiling)
+        .setInitialLayout(vk::ImageLayout::eUndefined)
+        .setUsage(usage)
+        .setSamples(vk::SampleCountFlagBits::e1)
+        .setSharingMode(vk::SharingMode::eExclusive);
+
+    vk::Device* logicalDevice = devices.getDevice();
+
+    if (logicalDevice->createImage(&imageInfo, nullptr, &image) != vk::Result::eSuccess)
+    {
+        throw std::runtime_error("Failed to create image!");
+    }
+
+    vk::MemoryRequirements memRequirements = logicalDevice->getImageMemoryRequirements(image);
+    vk::MemoryAllocateInfo allocInfo = vk::MemoryAllocateInfo()
+        .setAllocationSize(memRequirements.size)
+        .setMemoryTypeIndex(devices.findMemoryType(memRequirements.memoryTypeBits, properties));
+
+    imageMemory = logicalDevice->allocateMemory(allocInfo, nullptr);
+    logicalDevice->bindImageMemory(image, imageMemory, 0);
+}
+
+void CommandBuffers::transitionImageLayout(Devices& devices, vk::Image& image, vk::Format format,
+    vk::ImageLayout oldLayout, vk::ImageLayout newLayout)
+{
+    vk::CommandBuffer commandBuffer = this->beginSingleTimeCommands(devices.getDevice());
+
+    vk::ImageMemoryBarrier barrier = vk::ImageMemoryBarrier()
+        .setOldLayout(oldLayout)
+        .setNewLayout(newLayout)
+        .setSrcQueueFamilyIndex(vk::QueueFamilyIgnored)
+        .setDstQueueFamilyIndex(vk::QueueFamilyIgnored)
+        .setImage(image)
+        .setSubresourceRange(vk::ImageSubresourceRange{ vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 });
+
+    vk::PipelineStageFlags sourceStage;
+    vk::PipelineStageFlags destinationStage;
+
+    if ((oldLayout == vk::ImageLayout::eUndefined) && (newLayout == vk::ImageLayout::eTransferDstOptimal))
+    {
+        barrier.setSrcAccessMask(vk::AccessFlagBits::eNone);
+        barrier.setDstAccessMask(vk::AccessFlagBits::eTransferWrite);
+
+        sourceStage = vk::PipelineStageFlagBits::eTopOfPipe;
+        destinationStage = vk::PipelineStageFlagBits::eTransfer;
+    }
+    else if ((oldLayout == vk::ImageLayout::eTransferDstOptimal) && (newLayout == vk::ImageLayout::eShaderReadOnlyOptimal))
+    {
+        barrier.setSrcAccessMask(vk::AccessFlagBits::eTransferWrite);
+        barrier.setDstAccessMask(vk::AccessFlagBits::eShaderRead);
+
+        sourceStage = vk::PipelineStageFlagBits::eTransfer;
+        destinationStage = vk::PipelineStageFlagBits::eFragmentShader;
+    }
+    else
+    {
+        throw std::invalid_argument("Unsupported layout transition!");
+    }
+
+    commandBuffer.pipelineBarrier
+    (
+        sourceStage, destinationStage,
+        vk::DependencyFlagBits::eByRegion, 0, nullptr,
+        0, nullptr, 1, &barrier
+    );
+
+    this->endSingleTimeCommands(devices, commandBuffer);
+}
+
+void CommandBuffers::copyBufferToImage(Devices& devices, vk::Buffer& buffer, vk::Image& image, uint32_t width, uint32_t height)
+{
+    vk::CommandBuffer commandBuffer = this->beginSingleTimeCommands(devices.getDevice());
+
+    vk::BufferImageCopy region = vk::BufferImageCopy()
+        .setBufferOffset(0)
+        .setBufferRowLength(0)
+        .setBufferImageHeight(0)
+        .setImageSubresource(vk::ImageSubresourceLayers{ vk::ImageAspectFlagBits::eColor, 0, 0, 1 })
+        .setImageOffset({ 0, 0, 0 })
+        .setImageExtent({ width, height, 1 });
+
+    commandBuffer.copyBufferToImage(buffer, image, vk::ImageLayout::eTransferDstOptimal, 1, &region);
+
+    this->endSingleTimeCommands(devices, commandBuffer);
 }
 
 void CommandBuffers::createUniformBuffers(Devices& devices, int maxFramesInFlight)
@@ -98,7 +240,7 @@ void CommandBuffers::createIndexBuffer(Devices& devices)
     logicalDevice->freeMemory(stagingBufferMemory);
 }
 
-void CommandBuffers::createCommandBuffers(Devices& devices, int maxFramesInFlight)
+void CommandBuffers::createCommandBuffers(vk::Device* logicalDevice, int maxFramesInFlight)
 {
 
     vk::CommandBufferAllocateInfo allocInfo = vk::CommandBufferAllocateInfo()
@@ -107,7 +249,7 @@ void CommandBuffers::createCommandBuffers(Devices& devices, int maxFramesInFligh
         .setCommandBufferCount(static_cast<uint32_t>(maxFramesInFlight));
 
     commandBuffers.reserve(maxFramesInFlight);
-    std::vector<vk::CommandBuffer> commandBufferValues = devices.getDevice()->allocateCommandBuffers(allocInfo);
+    std::vector<vk::CommandBuffer> commandBufferValues = logicalDevice->allocateCommandBuffers(allocInfo);
     for (vk::CommandBuffer& item : commandBufferValues)
     {
         this->commandBuffers.push_back(std::make_shared<vk::CommandBuffer>(item));
@@ -131,39 +273,14 @@ const vk::CommandBuffer* CommandBuffers::getCurrentCommandBuffer()
 
 void CommandBuffers::copyBuffer(Devices& devices, vk::Buffer& srcBuffer, vk::Buffer& dstBuffer, vk::DeviceSize& size)
 {
-    vk::CommandBufferAllocateInfo allocInfo = vk::CommandBufferAllocateInfo()
-        .setLevel(vk::CommandBufferLevel::ePrimary)
-        .setCommandPool(*this->commandPool.get())
-        .setCommandBufferCount(1);
-
-    vk::Device* logicalDevice = devices.getDevice();
-    vk::CommandBuffer commandBuffer;
-    if (logicalDevice->allocateCommandBuffers(&allocInfo, &commandBuffer) != vk::Result::eSuccess)
-    {
-        throw std::runtime_error("Failed to allocate command buffer!");
-    }
-
-    vk::CommandBufferBeginInfo beginInfo = vk::CommandBufferBeginInfo()
-        .setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
-
-    commandBuffer.begin(beginInfo);
+    vk::CommandBuffer commandBuffer = this->beginSingleTimeCommands(devices.getDevice());
 
     vk::BufferCopy copyRegion = vk::BufferCopy()
         .setSrcOffset(0).setDstOffset(0)
         .setSize(size);
 
     commandBuffer.copyBuffer(srcBuffer, dstBuffer, 1, &copyRegion);
-    commandBuffer.end();
-
-    vk::SubmitInfo submitInfo = vk::SubmitInfo()
-        .setCommandBufferCount(1)
-        .setPCommandBuffers(&commandBuffer);
-
-    const vk::Queue* graphicsQueue = devices.getGraphicsQueue();
-    graphicsQueue->submit(submitInfo);
-    graphicsQueue->waitIdle();
-
-    logicalDevice->freeCommandBuffers(*this->commandPool.get(), commandBuffer);
+    this->endSingleTimeCommands(devices, commandBuffer);
 }
 
 void CommandBuffers::createBuffer(Devices& devices, vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties,
@@ -239,6 +356,38 @@ void CommandBuffers::updateUniformBuffer(const vk::Extent2D& swapchainExtent)
     memcpy(uniformBuffersMapped[this->currentFrame], &ubo, sizeof(ubo));
 }
 
+vk::CommandBuffer CommandBuffers::beginSingleTimeCommands(vk::Device* logicalDevice)
+{
+    vk::CommandBufferAllocateInfo allocInfo = vk::CommandBufferAllocateInfo()
+        .setLevel(vk::CommandBufferLevel::ePrimary)
+        .setCommandPool(*this->commandPool)
+        .setCommandBufferCount(1);
+
+    std::vector<vk::CommandBuffer> commandBufferValues = logicalDevice->allocateCommandBuffers(allocInfo);
+    vk::CommandBuffer result = commandBufferValues.front();
+
+    vk::CommandBufferBeginInfo beginInfo(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
+    result.begin(beginInfo);
+
+    return result;
+}
+
+void CommandBuffers::endSingleTimeCommands(Devices& devices, vk::CommandBuffer& commandBuffer)
+{
+    commandBuffer.end();
+
+    vk::SubmitInfo submitInfo = vk::SubmitInfo()
+        .setCommandBufferCount(1)
+        .setCommandBuffers(commandBuffer);
+    std::vector<vk::SubmitInfo> submitInfos = { submitInfo };
+
+    const vk::Queue* graphicsQueue = devices.getGraphicsQueue();
+    graphicsQueue->submit(submitInfos);
+    graphicsQueue->waitIdle();
+
+    devices.getDevice()->freeCommandBuffers(*this->commandPool, 1, &commandBuffer);
+}
+
 void CommandBuffers::increaseFrame(int maxFramesInFlight)
 {
     this->currentFrame = (this->currentFrame + 1) % maxFramesInFlight;
@@ -261,6 +410,8 @@ void CommandBuffers::releaseUniformBuffers(vk::Device* logicalDevice, size_t max
 
 void CommandBuffers::release(vk::Device* logicalDevice)
 {
+    logicalDevice->destroyImage(textureImage);
+    logicalDevice->freeMemory(textureImageMemory);
     logicalDevice->destroyBuffer(indexBuffer);
     logicalDevice->freeMemory(indexBufferMemory);
     logicalDevice->destroyBuffer(vertexBuffer);

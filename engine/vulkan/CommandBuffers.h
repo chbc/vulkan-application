@@ -24,10 +24,17 @@ private:
 
 private:
 	void init(const vk::SurfaceKHR& surface, Devices& devices, int maxFramesInFlight);
+	void createCommandPool(vk::Device* logicalDevice, uint32_t queueFamilyIndex);
+	void createTextureImage(Devices& devices);
+	void createImage(Devices& devices, uint32_t widith, uint32_t height, vk::Format format, vk::ImageTiling tiling,
+		vk::ImageUsageFlags usage, vk::MemoryPropertyFlags properties, vk::Image& image, vk::DeviceMemory& imageMemory);
+	void transitionImageLayout(Devices& devices, vk::Image& image, vk::Format format, 
+		vk::ImageLayout oldLayout, vk::ImageLayout newLayout);
+	void copyBufferToImage(Devices& devices, vk::Buffer& buffer, vk::Image& image, uint32_t width, uint32_t height);
 	void createUniformBuffers(Devices& devices, int maxFramesInFlight);
 	void createVertexBuffer(Devices& devices);
 	void createIndexBuffer(Devices& devices);
-	void createCommandBuffers(Devices& devices, int maxFramesInFlight);
+	void createCommandBuffers(vk::Device* logicalDevice, int maxFramesInFlight);
 	uint32_t getCurrentFrameIndex();
 	const vk::CommandBuffer* getCurrentCommandBuffer();
 	void copyBuffer(Devices& devices, vk::Buffer& srcBuffer, vk::Buffer& dstBuffer, vk::DeviceSize& size);
@@ -36,6 +43,9 @@ private:
 	void recordCommandBuffer(const vk::Extent2D& swapchainExtent, const vk::RenderPassBeginInfo& renderPassInfo,
 		const vk::Pipeline& graphicsPipeline, const vk::PipelineLayout& pipelineLayout, const vk::DescriptorSet* descriptorSets);
 	void updateUniformBuffer(const vk::Extent2D& swapchainExtent);
+
+	vk::CommandBuffer beginSingleTimeCommands(vk::Device* logicalDevice);
+	void endSingleTimeCommands(Devices& devices, vk::CommandBuffer& commandBuffer);
 	void increaseFrame(int maxFramesInFlight);
 	vk::DescriptorBufferInfo createDescriptorBufferInfo(size_t index);
 	void releaseUniformBuffers(vk::Device* logicalDevice, size_t maxFramesInFlight);

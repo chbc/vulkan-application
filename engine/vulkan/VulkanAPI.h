@@ -40,7 +40,6 @@ public:
 
 private:
 	void createInstance();
-	void createTextureImage();
 	std::vector<const char*> getRequiredExtensions();
 	void createSurface();
 	void createGraphicsPipeline();
