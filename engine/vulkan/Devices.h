@@ -42,6 +42,7 @@ private:
     QueueFamilyIndices findQueueFamilies(const vk::SurfaceKHR& surface);
     QueueFamilyIndices findQueueFamilies(const vk::SurfaceKHR& surface, const vk::PhysicalDevice* device);
     bool checkDeviceExtensionSupport(const vk::PhysicalDevice& device);
+    vk::ImageView createImageView(vk::Image& image, vk::Format format);
 
 friend class VulkanAPI;
 friend class Swapchain;

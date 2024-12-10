@@ -53,7 +53,9 @@ void Devices::createLogicalDevice(const ValidationLayers& validationLayers)
         queueCreateInfos.push_back(queueCreateInfo);
     }
 
-    vk::PhysicalDeviceFeatures deviceFeatures{};
+    vk::PhysicalDeviceFeatures deviceFeatures = vk::PhysicalDeviceFeatures()
+        .setSamplerAnisotropy(vk::True);
+
     vk::DeviceCreateInfo createInfo = vk::DeviceCreateInfo()
         .setQueueCreateInfoCount(static_cast<uint32_t>(queueCreateInfos.size()))
         .setPQueueCreateInfos(queueCreateInfos.data())
@@ -120,7 +122,10 @@ bool Devices::isDeviceSuitable(const vk::SurfaceKHR& surface, const vk::Physical
         swapChainAdequate = Swapchain::isSwapChainAdequate(surface, &device);
     }
 
-    bool result = indices.isComplete() && extensionsSupported && swapChainAdequate;
+    vk::PhysicalDeviceFeatures supportedFeatures = device.getFeatures();
+
+    bool result =   indices.isComplete() && extensionsSupported && 
+                    swapChainAdequate && supportedFeatures.samplerAnisotropy;
     if (result)
     {
         this->familyIndices = indices;
@@ -172,4 +177,22 @@ bool Devices::checkDeviceExtensionSupport(const vk::PhysicalDevice& device)
     }
 
     return requiredExtensions.empty();
+}
+
+vk::ImageView Devices::createImageView(vk::Image& image, vk::Format format)
+{
+    vk::ImageViewCreateInfo viewInfo = vk::ImageViewCreateInfo()
+        .setImage(image)
+        .setViewType(vk::ImageViewType::e2D)
+        .setFormat(format)
+        .setSubresourceRange(vk::ImageSubresourceRange{ vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 });
+
+    vk::ImageView result = this->logicalDevice->createImageView(viewInfo);
+
+    if (result == nullptr)
+    {
+        throw std::runtime_error("Failed to create image views!");
+    }
+
+    return result;
 }

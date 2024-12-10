@@ -27,6 +27,9 @@ std::vector<void*> uniformBuffersMapped;
 vk::Image textureImage;
 vk::DeviceMemory textureImageMemory;
 
+vk::ImageView textureImageView;
+vk::Sampler textureSampler;
+
 void CommandBuffers::init(const vk::SurfaceKHR& surface, Devices& devices, int maxFramesInFlight)
 {
     QueueFamilyIndices queueFamilyIndices = devices.findQueueFamilies(surface);
@@ -34,6 +37,8 @@ void CommandBuffers::init(const vk::SurfaceKHR& surface, Devices& devices, int m
     vk::Device* logicalDevice = devices.getDevice();
     this->createCommandPool(logicalDevice, queueFamilyIndices.graphicsFamily.value());
     this->createTextureImage(devices);
+    this->createTextureImageView(devices);
+    this->createTextureSampler(devices);
     this->createVertexBuffer(devices);
     this->createIndexBuffer(devices);
     this->createUniformBuffers(devices, maxFramesInFlight);
@@ -176,6 +181,35 @@ void CommandBuffers::copyBufferToImage(Devices& devices, vk::Buffer& buffer, vk:
     commandBuffer.copyBufferToImage(buffer, image, vk::ImageLayout::eTransferDstOptimal, 1, &region);
 
     this->endSingleTimeCommands(devices, commandBuffer);
+}
+
+void CommandBuffers::createTextureImageView(Devices& devices)
+{
+    textureImageView = devices.createImageView(textureImage, vk::Format::eR8G8B8A8Srgb);
+}
+
+void CommandBuffers::createTextureSampler(Devices& devices)
+{
+    vk::PhysicalDeviceProperties properties = devices.getPhysicalDevice()->getProperties();
+
+    vk::SamplerCreateInfo samplerInfo = vk::SamplerCreateInfo()
+        .setMagFilter(vk::Filter::eLinear)
+        .setMinFilter(vk::Filter::eLinear)
+        .setAddressModeU(vk::SamplerAddressMode::eMirroredRepeat)
+        .setAddressModeV(vk::SamplerAddressMode::eMirroredRepeat)
+        .setAddressModeW(vk::SamplerAddressMode::eMirroredRepeat)
+        .setAnisotropyEnable(vk::True)
+        .setMaxAnisotropy(properties.limits.maxSamplerAnisotropy)
+        .setBorderColor(vk::BorderColor::eIntOpaqueBlack)
+        .setUnnormalizedCoordinates(vk::False)
+        .setCompareEnable(vk::False)
+        .setCompareOp(vk::CompareOp::eAlways)
+        .setMipmapMode(vk::SamplerMipmapMode::eLinear)
+        .setMipLodBias(0.0f)
+        .setMinLod(0.0f)
+        .setMaxLod(0.0f);
+
+    textureSampler = devices.getDevice()->createSampler(samplerInfo);
 }
 
 void CommandBuffers::createUniformBuffers(Devices& devices, int maxFramesInFlight)
@@ -410,12 +444,16 @@ void CommandBuffers::releaseUniformBuffers(vk::Device* logicalDevice, size_t max
 
 void CommandBuffers::release(vk::Device* logicalDevice)
 {
+    logicalDevice->destroySampler(textureSampler);
+    logicalDevice->destroyImageView(textureImageView);
     logicalDevice->destroyImage(textureImage);
     logicalDevice->freeMemory(textureImageMemory);
+
     logicalDevice->destroyBuffer(indexBuffer);
     logicalDevice->freeMemory(indexBufferMemory);
     logicalDevice->destroyBuffer(vertexBuffer);
     logicalDevice->freeMemory(vertexBufferMemory);
 
     logicalDevice->destroyCommandPool(*this->commandPool.get());
+
 }

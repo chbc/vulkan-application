@@ -73,22 +73,7 @@ void Swapchain::createImageViews(Devices& devices)
     swapchainImageViews.resize(swapchainImages.size());
     for (size_t i = 0; i < swapchainImages.size(); i++)
     {
-        vk::ComponentMapping components
-        {
-            vk::ComponentSwizzle::eIdentity, vk::ComponentSwizzle::eIdentity,
-            vk::ComponentSwizzle::eIdentity, vk::ComponentSwizzle::eIdentity
-        };
-
-        vk::ImageSubresourceRange subresourceRange{ vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 };
-
-        vk::ImageViewCreateInfo createInfo = vk::ImageViewCreateInfo()
-            .setImage(swapchainImages[i])
-            .setViewType(vk::ImageViewType::e2D)
-            .setFormat(swapchainImageFormat)
-            .setComponents(components)
-            .setSubresourceRange(subresourceRange);
-
-        swapchainImageViews[i] = devices.getDevice()->createImageView(createInfo);
+        swapchainImageViews[i] = devices.createImageView(swapchainImages[i], swapchainImageFormat);
         if (swapchainImageViews[i] == nullptr)
         {
             throw std::runtime_error("Failed to create image views!");

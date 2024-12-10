@@ -22,6 +22,7 @@ namespace vk
 	class DescriptorPool;
 	class DescriptorSet;
 	class Image;
+	class ImageView;
 	
 	struct PipelineLayoutCreateInfo;
 	struct SurfaceFormatKHR;

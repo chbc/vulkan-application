@@ -31,6 +31,8 @@ private:
 	void transitionImageLayout(Devices& devices, vk::Image& image, vk::Format format, 
 		vk::ImageLayout oldLayout, vk::ImageLayout newLayout);
 	void copyBufferToImage(Devices& devices, vk::Buffer& buffer, vk::Image& image, uint32_t width, uint32_t height);
+	void createTextureImageView(Devices& devices);
+	void createTextureSampler(Devices& devices);
 	void createUniformBuffers(Devices& devices, int maxFramesInFlight);
 	void createVertexBuffer(Devices& devices);
 	void createIndexBuffer(Devices& devices);
