@@ -34,7 +34,7 @@ void VulkanAPI::init(SDLAPI& sdlApi)
     this->createGraphicsPipeline();
     this->swapchain.createFramebuffers(devices, this->renderPass.getRenderPassRef());
     this->commandBuffers.init(surface, this->devices, MAX_FRAMES_IN_FLIGHT);
-    this->descriptorSets.initPool(logicalDevice);
+    this->descriptorSets.initPool(logicalDevice, MAX_FRAMES_IN_FLIGHT);
     this->createDescriptorSets();
     this->commandBuffers.createCommandBuffers(this->devices.getDevice(), MAX_FRAMES_IN_FLIGHT);
     this->syncObjects.init(logicalDevice, MAX_FRAMES_IN_FLIGHT);
@@ -68,7 +68,7 @@ void VulkanAPI::drawFrame()
 
     const vk::RenderPassBeginInfo& renderPassInfo = this->renderPass.createInfo(this->swapchain, swapchainExtent, imageIndex.value);
     this->commandBuffers.recordCommandBuffer(swapchainExtent, renderPassInfo, graphicsPipeline,
-        pipelineLayout, this->descriptorSets.getDescriptorSet());
+        pipelineLayout, &this->descriptorSets.getDescriptorSet(currentFrame));
     const vk::CommandBuffer* commandBuffer = this->commandBuffers.getCurrentCommandBuffer();
 
     vk::Semaphore waitSemaphores[] = { currentImageSemaphore };
@@ -315,14 +315,31 @@ void VulkanAPI::createGraphicsPipeline()
 void VulkanAPI::createDescriptorSets()
 {
     vk::Device* logicalDevice = this->devices.getDevice();
-    this->descriptorSets.initDescriptorSet(logicalDevice);
+    this->descriptorSets.initDescriptorSet(logicalDevice, MAX_FRAMES_IN_FLIGHT);
 
-    vk::DescriptorSet* descriptorSet = this->descriptorSets.getDescriptorSet();
-    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+    for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
     {
-        vk::DescriptorBufferInfo descriptorBufferInfo = this->commandBuffers.createDescriptorBufferInfo(i);
-        vk::WriteDescriptorSet writeDescriptorSet{ *descriptorSet, 0, 0, vk::DescriptorType::eUniformBuffer, {}, descriptorBufferInfo };
-        logicalDevice->updateDescriptorSets(writeDescriptorSet, nullptr);
+        vk::DescriptorSet& descriptorSet = this->descriptorSets.getDescriptorSet(i);
+        vk::DescriptorBufferInfo bufferInfo;
+        vk::DescriptorImageInfo imageInfo;
+        this->commandBuffers.createDescriptorsBufferInfo(i, bufferInfo, imageInfo);
+
+        std::array<vk::WriteDescriptorSet, 2> descriptorWrites;
+        descriptorWrites[0].setDstSet(descriptorSet)
+            .setDstBinding(0)
+            .setDstArrayElement(0)
+            .setDescriptorType(vk::DescriptorType::eUniformBuffer)
+            .setDescriptorCount(1)
+            .setBufferInfo(bufferInfo);
+        
+        descriptorWrites[1].setDstSet(descriptorSet)
+            .setDstBinding(1)
+            .setDstArrayElement(0)
+            .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
+            .setDescriptorCount(1)
+            .setImageInfo(imageInfo);
+
+        logicalDevice->updateDescriptorSets(descriptorWrites, nullptr);
     }
 }
 

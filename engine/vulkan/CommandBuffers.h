@@ -16,10 +16,10 @@ private:
 	const std::vector<uint16_t> indices = { 0, 1, 2, 2, 3, 0 };
 	const std::vector<Vertex> vertices =
 	{
-		{{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-		{{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
-		{{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
-		{{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}
+		{{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+		{{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+		{{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+		{{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}}
 	};
 
 private:
@@ -49,7 +49,7 @@ private:
 	vk::CommandBuffer beginSingleTimeCommands(vk::Device* logicalDevice);
 	void endSingleTimeCommands(Devices& devices, vk::CommandBuffer& commandBuffer);
 	void increaseFrame(int maxFramesInFlight);
-	vk::DescriptorBufferInfo createDescriptorBufferInfo(size_t index);
+	void createDescriptorsBufferInfo(size_t index, vk::DescriptorBufferInfo& bufferInfo, vk::DescriptorImageInfo& imageInfo);
 	void releaseUniformBuffers(vk::Device* logicalDevice, size_t maxFramesInFlight);
 	void release(vk::Device* logicalDevice);
 

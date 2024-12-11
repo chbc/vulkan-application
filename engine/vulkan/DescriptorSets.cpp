@@ -2,39 +2,56 @@
 
 #include <vulkan/vulkan.hpp>
 
+std::vector<vk::DescriptorSet> vkDescriptorSets;
+vk::DescriptorSetLayout descriptorSetLayout;
+vk::DescriptorPool descriptorPool;
+
 void DescriptorSets::initLayout(vk::Device* logicalDevice)
 {
     vk::DescriptorSetLayoutBinding uboLayoutBinding{ 0, vk::DescriptorType::eUniformBuffer, 1, vk::ShaderStageFlagBits::eVertex };
-    vk::DescriptorSetLayoutCreateInfo createInfo{ {}, uboLayoutBinding };
-    vk::DescriptorSetLayout layout = logicalDevice->createDescriptorSetLayout(createInfo);
-    descriptorSetLayout = std::make_shared<vk::DescriptorSetLayout>(layout);
+    vk::DescriptorSetLayoutBinding samplerLayoutBinding{ 1, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eFragment };
+    
+    std::array<vk::DescriptorSetLayoutBinding, 2> bindings = { uboLayoutBinding, samplerLayoutBinding };
+    
+    vk::DescriptorSetLayoutCreateInfo LayoutInfo{ {}, bindings };
+
+    descriptorSetLayout = logicalDevice->createDescriptorSetLayout(LayoutInfo);
 }
 
-void DescriptorSets::initPool(vk::Device* logicalDevice)
+void DescriptorSets::initPool(vk::Device* logicalDevice, uint32_t maxFramesInFlight)
 {
-    vk::DescriptorPoolSize poolSize{ vk::DescriptorType::eUniformBuffer, 1 };
-    vk::DescriptorPoolCreateInfo createInfo{ vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet, 1, poolSize };
-    vk::DescriptorPool pool = logicalDevice->createDescriptorPool(createInfo);
-    descriptorPool = std::make_shared<vk::DescriptorPool>(pool);
+    std::array<vk::DescriptorPoolSize, 2> poolSizes =
+    { 
+        vk::DescriptorPoolSize{ vk::DescriptorType::eUniformBuffer, maxFramesInFlight },
+        vk::DescriptorPoolSize{ vk::DescriptorType::eCombinedImageSampler, maxFramesInFlight}
+    };
+
+    vk::DescriptorPoolCreateInfo poolInfo{ {} , maxFramesInFlight, poolSizes};
+    descriptorPool = logicalDevice->createDescriptorPool(poolInfo);
 }
 
-void DescriptorSets::initDescriptorSet(vk::Device* logicalDevice)
+void DescriptorSets::initDescriptorSet(vk::Device* logicalDevice, uint32_t maxFramesInFlight)
 {
-    vk::DescriptorSetAllocateInfo descriptorSetAllocateInfo{ *descriptorPool.get(), *descriptorSetLayout.get() };
-    vk::DescriptorSet set = logicalDevice->allocateDescriptorSets(descriptorSetAllocateInfo).front();
-    descriptorSet = std::make_shared<vk::DescriptorSet>(set);
+    std::vector<vk::DescriptorSetLayout> layouts(maxFramesInFlight, descriptorSetLayout);
+    
+    vk::DescriptorSetAllocateInfo allocInfo = vk::DescriptorSetAllocateInfo()
+        .setDescriptorPool(descriptorPool)
+        .setDescriptorSetCount(maxFramesInFlight)
+        .setSetLayouts(layouts);
+
+    vkDescriptorSets = logicalDevice->allocateDescriptorSets(allocInfo);
 }
 
-vk::DescriptorSet* DescriptorSets::getDescriptorSet()
+vk::DescriptorSet& DescriptorSets::getDescriptorSet(uint32_t index)
 {
-    return this->descriptorSet.get();
+    return vkDescriptorSets[index];
 }
 
 vk::PipelineLayoutCreateInfo DescriptorSets::createPipelineLayoutInfo()
 {
     vk::PipelineLayoutCreateInfo result = vk::PipelineLayoutCreateInfo()
         .setSetLayoutCount(1)
-        .setPSetLayouts(this->descriptorSetLayout.get())
+        .setPSetLayouts(&descriptorSetLayout)
         .setPushConstantRangeCount(0)
         .setPPushConstantRanges(nullptr);
 
@@ -43,6 +60,6 @@ vk::PipelineLayoutCreateInfo DescriptorSets::createPipelineLayoutInfo()
 
 void DescriptorSets::release(vk::Device* logicalDevice)
 {
-    logicalDevice->destroyDescriptorPool(*this->descriptorPool.get());
-    logicalDevice->destroyDescriptorSetLayout(*this->descriptorSetLayout.get());
+    logicalDevice->destroyDescriptorPool(descriptorPool);
+    logicalDevice->destroyDescriptorSetLayout(descriptorSetLayout);
 }

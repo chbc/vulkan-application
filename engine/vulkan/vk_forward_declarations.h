@@ -30,6 +30,7 @@ namespace vk
 	struct SurfaceCapabilitiesKHR;
 	struct RenderPassBeginInfo;
 	struct DescriptorBufferInfo;
+	struct DescriptorImageInfo;
 
 	enum class PresentModeKHR;
 	enum class Format;

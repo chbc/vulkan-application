@@ -427,10 +427,10 @@ void CommandBuffers::increaseFrame(int maxFramesInFlight)
     this->currentFrame = (this->currentFrame + 1) % maxFramesInFlight;
 }
 
-vk::DescriptorBufferInfo CommandBuffers::createDescriptorBufferInfo(size_t index)
+void CommandBuffers::createDescriptorsBufferInfo(size_t index, vk::DescriptorBufferInfo& bufferInfo, vk::DescriptorImageInfo& imageInfo)
 {
-    vk::DescriptorBufferInfo result{ uniformBuffers[index], 0, sizeof(UniformBufferObject) };
-    return result;
+    bufferInfo = vk::DescriptorBufferInfo(uniformBuffers[index], 0, sizeof(UniformBufferObject));
+    imageInfo = vk::DescriptorImageInfo(textureSampler, textureImageView, vk::ImageLayout::eShaderReadOnlyOptimal);
 }
 
 void CommandBuffers::releaseUniformBuffers(vk::Device* logicalDevice, size_t maxFramesInFlight)

@@ -3,19 +3,15 @@
 #include "vk_forward_declarations.h"
 
 #include <memory>
+#include <vector>
 
 class DescriptorSets
 {
 private:
-	std::shared_ptr<vk::DescriptorSetLayout> descriptorSetLayout;
-	std::shared_ptr<vk::DescriptorPool> descriptorPool;
-	std::shared_ptr<vk::DescriptorSet> descriptorSet;
-
-private:
 	void initLayout(vk::Device* logicalDevice);
-	void initPool(vk::Device* logicalDevice);
-	void initDescriptorSet(vk::Device* logicalDevice);
-	vk::DescriptorSet* getDescriptorSet();
+	void initPool(vk::Device* logicalDevice, uint32_t maxFramesInFlight);
+	void initDescriptorSet(vk::Device* logicalDevice, uint32_t maxFramesInFlight);
+	vk::DescriptorSet& getDescriptorSet(uint32_t index);
 	vk::PipelineLayoutCreateInfo createPipelineLayoutInfo();
 	void release(vk::Device* logicalDevice);
 
