@@ -111,6 +111,47 @@ uint32_t Devices::findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags pr
     throw std::runtime_error("Failed to find suitable memory type!");
 }
 
+vk::Format Devices::findDepthFormat()
+{
+    return this->findSupportedFormat
+    (
+        { vk::Format::eD32Sfloat, vk::Format::eD32SfloatS8Uint, vk::Format::eD24UnormS8Uint },
+        vk::ImageTiling::eOptimal, vk::FormatFeatureFlagBits::eDepthStencilAttachment
+    );
+}
+
+vk::Format Devices::findSupportedFormat(const std::vector<vk::Format>& candidates, vk::ImageTiling tiling, vk::FormatFeatureFlags features)
+{
+    vk::Format result = vk::Format::eUndefined;
+
+    for (vk::Format format : candidates)
+    {
+        vk::FormatProperties props = this->physicalDevice->getFormatProperties(format);
+
+        if
+        (
+            ((tiling == vk::ImageTiling::eLinear) && (props.linearTilingFeatures & features) == features) ||
+            ((tiling == vk::ImageTiling::eOptimal) && (props.optimalTilingFeatures & features) == features)
+        )
+        {
+            result = format;
+            break;
+        }
+    }
+
+    if (result == vk::Format::eUndefined)
+    {
+        throw std::runtime_error("Failed to find supported format!");
+    }
+
+    return result;
+}
+
+bool Devices::hasStencilComponent(vk::Format format)
+{
+    return ((format == vk::Format::eD32SfloatS8Uint) || (format == vk::Format::eD24UnormS8Uint));
+}
+
 bool Devices::isDeviceSuitable(const vk::SurfaceKHR& surface, const vk::PhysicalDevice& device)
 {
     QueueFamilyIndices indices = findQueueFamilies(surface, &device);
@@ -179,13 +220,13 @@ bool Devices::checkDeviceExtensionSupport(const vk::PhysicalDevice& device)
     return requiredExtensions.empty();
 }
 
-vk::ImageView Devices::createImageView(vk::Image& image, vk::Format format)
+vk::ImageView Devices::createImageView(vk::Image& image, vk::Format format, vk::ImageAspectFlags aspectFlags)
 {
     vk::ImageViewCreateInfo viewInfo = vk::ImageViewCreateInfo()
         .setImage(image)
         .setViewType(vk::ImageViewType::e2D)
         .setFormat(format)
-        .setSubresourceRange(vk::ImageSubresourceRange{ vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 });
+        .setSubresourceRange(vk::ImageSubresourceRange{ aspectFlags, 0, 1, 0, 1 });
 
     vk::ImageView result = this->logicalDevice->createImageView(viewInfo);
 

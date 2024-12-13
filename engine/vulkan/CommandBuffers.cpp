@@ -1,5 +1,6 @@
 #include "CommandBuffers.h"
 #include "Devices.h"
+#include "Swapchain.h"
 
 #include <vulkan/vulkan.hpp>
 
@@ -26,16 +27,20 @@ std::vector<void*> uniformBuffersMapped;
 
 vk::Image textureImage;
 vk::DeviceMemory textureImageMemory;
-
 vk::ImageView textureImageView;
 vk::Sampler textureSampler;
 
-void CommandBuffers::init(const vk::SurfaceKHR& surface, Devices& devices, int maxFramesInFlight)
+vk::Image depthImage;
+vk::DeviceMemory depthImageMemory;
+vk::ImageView depthImageView;
+
+void CommandBuffers::init(const vk::SurfaceKHR& surface, Devices& devices, Swapchain& swapchain, int maxFramesInFlight)
 {
     QueueFamilyIndices queueFamilyIndices = devices.findQueueFamilies(surface);
 
     vk::Device* logicalDevice = devices.getDevice();
     this->createCommandPool(logicalDevice, queueFamilyIndices.graphicsFamily.value());
+    this->createDepthResources(devices, swapchain);
     this->createTextureImage(devices);
     this->createTextureImageView(devices);
     this->createTextureSampler(devices);
@@ -51,6 +56,23 @@ void CommandBuffers::createCommandPool(vk::Device* logicalDevice, uint32_t queue
         .setQueueFamilyIndex(queueFamilyIndex);
     vk::CommandPool commandPoolValue = logicalDevice->createCommandPool(poolInfo);
     this->commandPool = std::make_shared<vk::CommandPool>(commandPoolValue);
+}
+
+void CommandBuffers::createDepthResources(Devices& devices, Swapchain& swapchain)
+{
+    const vk::Extent2D& swapchainExtent = swapchain.getExtent();
+    
+    vk::Format depthFormat = devices.findDepthFormat();
+    this->createImage(devices, swapchainExtent.width, swapchainExtent.height, depthFormat, vk::ImageTiling::eOptimal,
+        vk::ImageUsageFlagBits::eDepthStencilAttachment, vk::MemoryPropertyFlagBits::eDeviceLocal, depthImage, depthImageMemory);
+
+    depthImageView = devices.createImageView(depthImage, depthFormat, vk::ImageAspectFlagBits::eDepth);
+}
+
+void CommandBuffers::recreateDepthResources(Devices& devices, Swapchain& swapchain)
+{
+    this->releaseDepthImages(devices.getDevice());
+    this->createDepthResources(devices, swapchain);
 }
 
 void CommandBuffers::createTextureImage(Devices& devices)
@@ -185,7 +207,7 @@ void CommandBuffers::copyBufferToImage(Devices& devices, vk::Buffer& buffer, vk:
 
 void CommandBuffers::createTextureImageView(Devices& devices)
 {
-    textureImageView = devices.createImageView(textureImage, vk::Format::eR8G8B8A8Srgb);
+    textureImageView = devices.createImageView(textureImage, vk::Format::eR8G8B8A8Srgb, vk::ImageAspectFlagBits::eColor);
 }
 
 void CommandBuffers::createTextureSampler(Devices& devices)
@@ -300,6 +322,11 @@ uint32_t CommandBuffers::getCurrentFrameIndex()
     return this->currentFrame;
 }
 
+vk::ImageView& CommandBuffers::getDepthImageView()
+{
+    return depthImageView;
+}
+
 const vk::CommandBuffer* CommandBuffers::getCurrentCommandBuffer()
 {
     return this->commandBuffers[this->currentFrame].get();
@@ -338,7 +365,7 @@ void CommandBuffers::createBuffer(Devices& devices, vk::DeviceSize size, vk::Buf
     logicalDevice->bindBufferMemory(buffer, bufferMemory, 0);
 }
 
-void CommandBuffers::recordCommandBuffer(const vk::Extent2D& swapchainExtent, const vk::RenderPassBeginInfo& renderPassInfo,
+void CommandBuffers::recordCommandBuffer(const vk::Extent2D& swapchainExtent, vk::RenderPassBeginInfo& renderPassInfo,
     const vk::Pipeline& graphicsPipeline, const vk::PipelineLayout& pipelineLayout, const vk::DescriptorSet* descriptorSets)
 {
     vk::CommandBuffer* commandBuffer = this->commandBuffers[currentFrame].get();
@@ -347,6 +374,12 @@ void CommandBuffers::recordCommandBuffer(const vk::Extent2D& swapchainExtent, co
     vk::CommandBufferBeginInfo beginInfo;
 
     commandBuffer->begin(beginInfo);
+
+    std::array<vk::ClearValue, 2> clearValues;
+    clearValues[0].color = vk::ClearColorValue{ 0.0f, 0.0f, 0.0f, 1.0f };
+    clearValues[1].depthStencil = vk::ClearDepthStencilValue{ 1.0f, 0 };
+
+    renderPassInfo.setClearValues(clearValues);
 
     commandBuffer->beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
     commandBuffer->bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
@@ -437,8 +470,15 @@ void CommandBuffers::releaseUniformBuffers(vk::Device* logicalDevice, size_t max
 {
     for (size_t i = 0; i < maxFramesInFlight; i++)
     {
-        logicalDevice->destroyBuffer(uniformBuffers[i]);
-        logicalDevice->freeMemory(uniformBuffersMemory[i]);
+        if (i < uniformBuffers.size())
+        {
+            logicalDevice->destroyBuffer(uniformBuffers[i]);
+        }
+
+        if (i < uniformBuffersMemory.size())
+        {
+            logicalDevice->freeMemory(uniformBuffersMemory[i]);
+        }
     }
 }
 
@@ -454,6 +494,15 @@ void CommandBuffers::release(vk::Device* logicalDevice)
     logicalDevice->destroyBuffer(vertexBuffer);
     logicalDevice->freeMemory(vertexBufferMemory);
 
+    this->releaseDepthImages(logicalDevice);
+
     logicalDevice->destroyCommandPool(*this->commandPool.get());
 
+}
+
+void CommandBuffers::releaseDepthImages(vk::Device* logicalDevice)
+{
+    logicalDevice->destroyImageView(depthImageView);
+    logicalDevice->destroyImage(depthImage);
+    logicalDevice->freeMemory(depthImageMemory);
 }

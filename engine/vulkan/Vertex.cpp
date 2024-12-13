@@ -19,7 +19,7 @@ std::array<vk::VertexInputAttributeDescription, 3> Vertex::getAttributeDescripti
     attributeDescriptions[0]
         .setBinding(0)
         .setLocation(0)
-        .setFormat(vk::Format::eR32G32Sfloat)
+        .setFormat(vk::Format::eR32G32B32Sfloat)
         .setOffset(offsetof(Vertex, pos));
 
     attributeDescriptions[1]

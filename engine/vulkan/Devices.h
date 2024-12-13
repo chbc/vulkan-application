@@ -4,6 +4,7 @@
 
 #include <memory>
 #include <optional>
+#include <vector>
 
 class ValidationLayers;
 
@@ -38,11 +39,14 @@ private:
     const vk::Queue* getGraphicsQueue();
     const vk::Queue* getPresentQueue();
     uint32_t findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties);
+    vk::Format findDepthFormat();
+    vk::Format findSupportedFormat(const std::vector<vk::Format>& candidates, vk::ImageTiling tiling, vk::FormatFeatureFlags features);
+    bool hasStencilComponent(vk::Format format);
     bool isDeviceSuitable(const vk::SurfaceKHR& surface, const vk::PhysicalDevice& device);
     QueueFamilyIndices findQueueFamilies(const vk::SurfaceKHR& surface);
     QueueFamilyIndices findQueueFamilies(const vk::SurfaceKHR& surface, const vk::PhysicalDevice* device);
     bool checkDeviceExtensionSupport(const vk::PhysicalDevice& device);
-    vk::ImageView createImageView(vk::Image& image, vk::Format format);
+    vk::ImageView createImageView(vk::Image& image, vk::Format format, vk::ImageAspectFlags aspectFlags);
 
 friend class VulkanAPI;
 friend class Swapchain;

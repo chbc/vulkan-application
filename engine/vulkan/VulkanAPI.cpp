@@ -32,8 +32,11 @@ void VulkanAPI::init(SDLAPI& sdlApi)
 
     this->descriptorSets.initLayout(logicalDevice);
     this->createGraphicsPipeline();
-    this->swapchain.createFramebuffers(devices, this->renderPass.getRenderPassRef());
-    this->commandBuffers.init(surface, this->devices, MAX_FRAMES_IN_FLIGHT);
+
+    this->commandBuffers.init(surface, this->devices, this->swapchain, MAX_FRAMES_IN_FLIGHT);
+    vk::ImageView& depthImageView = this->commandBuffers.getDepthImageView();
+    this->swapchain.createFramebuffers(devices, this->renderPass.getRenderPassRef(), depthImageView);
+
     this->descriptorSets.initPool(logicalDevice, MAX_FRAMES_IN_FLIGHT);
     this->createDescriptorSets();
     this->commandBuffers.createCommandBuffers(this->devices.getDevice(), MAX_FRAMES_IN_FLIGHT);
@@ -53,7 +56,10 @@ void VulkanAPI::drawFrame()
 
     if (imageIndex.result == vk::Result::eErrorOutOfDateKHR)
     {
-        this->swapchain.recreate(surface, this->sdlApi->window, this->devices, this->renderPass.getRenderPassRef());
+        vk::ImageView& depthImageView = this->commandBuffers.getDepthImageView();
+        this->swapchain.recreate(surface, this->sdlApi->window, this->devices);
+        this->commandBuffers.recreateDepthResources(this->devices, this->swapchain);
+        this->swapchain.createFramebuffers(this->devices, this->renderPass.getRenderPassRef(), depthImageView);
         return;
     }
     else if ((imageIndex.result != vk::Result::eSuccess) && (imageIndex.result != vk::Result::eSuboptimalKHR))
@@ -66,7 +72,7 @@ void VulkanAPI::drawFrame()
     const vk::Extent2D& swapchainExtent = this->swapchain.getExtent();
     this->commandBuffers.updateUniformBuffer(swapchainExtent);
 
-    const vk::RenderPassBeginInfo& renderPassInfo = this->renderPass.createInfo(this->swapchain, swapchainExtent, imageIndex.value);
+    vk::RenderPassBeginInfo& renderPassInfo = this->renderPass.createInfo(this->swapchain, swapchainExtent, imageIndex.value);
     this->commandBuffers.recordCommandBuffer(swapchainExtent, renderPassInfo, graphicsPipeline,
         pipelineLayout, &this->descriptorSets.getDescriptorSet(currentFrame));
     const vk::CommandBuffer* commandBuffer = this->commandBuffers.getCurrentCommandBuffer();
@@ -106,7 +112,10 @@ void VulkanAPI::drawFrame()
     if ((result == vk::Result::eErrorOutOfDateKHR) || (result != vk::Result::eSuboptimalKHR) || framebufferResized)
     {
         framebufferResized = false;
-        this->swapchain.recreate(surface, this->sdlApi->window, this->devices, this->renderPass.getRenderPassRef());
+        vk::ImageView& depthImageView = this->commandBuffers.getDepthImageView();
+        this->swapchain.recreate(surface, this->sdlApi->window, this->devices);
+        this->commandBuffers.recreateDepthResources(this->devices, this->swapchain);
+        this->swapchain.createFramebuffers(this->devices, this->renderPass.getRenderPassRef(), depthImageView);
     }
     else if (result != vk::Result::eSuccess)
     {
@@ -284,6 +293,15 @@ void VulkanAPI::createGraphicsPipeline()
         throw std::runtime_error("Failed to create pipeline layout!");
     }
 
+    vk::PipelineDepthStencilStateCreateInfo depthStencil = vk::PipelineDepthStencilStateCreateInfo()
+        .setDepthTestEnable(vk::True)
+        .setDepthWriteEnable(vk::True)
+        .setDepthCompareOp(vk::CompareOp::eLess)
+        .setDepthBoundsTestEnable(vk::False)
+        .setMinDepthBounds(0.0f)
+        .setMaxDepthBounds(1.0f)
+        .setStencilTestEnable(vk::False);
+
     vk::GraphicsPipelineCreateInfo pipelineInfo = vk::GraphicsPipelineCreateInfo()
         .setStageCount(2)
         .setPStages(shaderStages)
@@ -292,11 +310,11 @@ void VulkanAPI::createGraphicsPipeline()
         .setPViewportState(&viewportState)
         .setPRasterizationState(&rasterizer)
         .setPMultisampleState(&multisampling)
-        .setPDepthStencilState(nullptr)
+        .setPDepthStencilState(&depthStencil)
         .setPColorBlendState(&colorBlending)
         .setPDynamicState(&dynamicState)
         .setLayout(pipelineLayout)
-        .setRenderPass(*this->renderPass.getRenderPassRef())
+        .setRenderPass(this->renderPass.getRenderPassRef())
         .setSubpass(0)
         .setBasePipelineHandle(nullptr)
         .setBasePipelineIndex(-1);

@@ -73,7 +73,7 @@ void Swapchain::createImageViews(Devices& devices)
     swapchainImageViews.resize(swapchainImages.size());
     for (size_t i = 0; i < swapchainImages.size(); i++)
     {
-        swapchainImageViews[i] = devices.createImageView(swapchainImages[i], swapchainImageFormat);
+        swapchainImageViews[i] = devices.createImageView(swapchainImages[i], swapchainImageFormat, vk::ImageAspectFlagBits::eColor);
         if (swapchainImageViews[i] == nullptr)
         {
             throw std::runtime_error("Failed to create image views!");
@@ -81,17 +81,17 @@ void Swapchain::createImageViews(Devices& devices)
     }
 }
 
-void Swapchain::createFramebuffers(Devices& devices, vk::RenderPass* renderPass)
+void Swapchain::createFramebuffers(Devices& devices, vk::RenderPass& renderPass, vk::ImageView& depthImageView)
 {
     swapchainFramebuffers.resize(swapchainImageViews.size());
     for (size_t i = 0; i < swapchainImageViews.size(); i++)
     {
-        vk::ImageView attachments[] = { swapchainImageViews[i] };
+        std::array<vk::ImageView, 2> attachments = { swapchainImageViews[i], depthImageView };
 
         vk::FramebufferCreateInfo framebufferInfo = vk::FramebufferCreateInfo()
-            .setRenderPass(*renderPass)
-            .setAttachmentCount(1)
-            .setPAttachments(attachments)
+            .setRenderPass(renderPass)
+            .setAttachmentCount(static_cast<uint32_t>(attachments.size()))
+            .setAttachments(attachments)
             .setWidth(swapchainExtent.width)
             .setHeight(swapchainExtent.height)
             .setLayers(1);
@@ -189,7 +189,7 @@ vk::Extent2D Swapchain::chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capab
     return actualExtent;
 }
 
-void Swapchain::recreate(const vk::SurfaceKHR& surface, SDL_Window* window, Devices& devices, vk::RenderPass* renderPass)
+void Swapchain::recreate(const vk::SurfaceKHR& surface, SDL_Window* window, Devices& devices)
 {
     devices.getDevice()->waitIdle();
 
@@ -197,7 +197,6 @@ void Swapchain::recreate(const vk::SurfaceKHR& surface, SDL_Window* window, Devi
 
     this->init(surface, window, devices);
     this->createImageViews(devices);
-    this->createFramebuffers(devices, renderPass);
 }
 
 void Swapchain::release(Devices& devices)

@@ -42,14 +42,20 @@ namespace vk
 	typedef VkFlags VkBufferUsageFlags;
 	typedef VkFlags VkMemoryPropertyFlags;
 	typedef VkFlags VkImageUsageFlags;
+	typedef VkFlags VkFormatFeatureFlags;
+	typedef VkFlags VkImageAspectFlags;
 
 	enum class MemoryPropertyFlagBits : VkMemoryPropertyFlags;
 	enum class BufferUsageFlagBits : VkBufferUsageFlags;
 	enum class ImageUsageFlagBits : VkImageUsageFlags;
+	enum class FormatFeatureFlagBits : VkFormatFeatureFlags;
+	enum class ImageAspectFlagBits : VkImageAspectFlags;
 
 	using MemoryPropertyFlags = Flags<MemoryPropertyFlagBits>;
 	using BufferUsageFlags = Flags<BufferUsageFlagBits>;
 	using ImageUsageFlags = Flags<ImageUsageFlagBits>;
+	using FormatFeatureFlags = Flags<FormatFeatureFlagBits>;
+	using ImageAspectFlags = Flags<ImageAspectFlagBits>;
 
 	using DeviceSize = uint64_t;
 }

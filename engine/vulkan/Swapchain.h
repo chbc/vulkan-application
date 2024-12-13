@@ -16,7 +16,7 @@ private:
 private:
 	void init(const vk::SurfaceKHR& surface, SDL_Window* window, Devices& devices);
     void createImageViews(Devices& devices);
-    void createFramebuffers(Devices& devices, vk::RenderPass* renderPass);
+    void createFramebuffers(Devices& devices, vk::RenderPass& renderPass, vk::ImageView& depthImageView);
     vk::SwapchainKHR* getSwapchainKHR();
     vk::Format getImageFormat();
     const vk::Extent2D& getExtent();
@@ -26,10 +26,11 @@ private:
     vk::SurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats);
     vk::PresentModeKHR chooseSwapPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes);
     vk::Extent2D chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities, SDL_Window* window);
-    void recreate(const vk::SurfaceKHR& surface, SDL_Window* window, Devices& devices, vk::RenderPass* renderPass);
+    void recreate(const vk::SurfaceKHR& surface, SDL_Window* window, Devices& devices);
     void release(Devices& devices);
 
 friend class VulkanAPI;
 friend class Devices;
 friend class RenderPass;
+friend class CommandBuffers;
 };
