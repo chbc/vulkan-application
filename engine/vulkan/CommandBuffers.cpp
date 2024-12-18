@@ -7,7 +7,11 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "dependencies/stb_image.h"
 
+#define TINYOBJLOADER_IMPLEMENTATION
+#include "dependencies/tiny_obj_loader.h"
+
 #include <chrono>
+#include <unordered_map>
 
 struct UniformBufferObject
 {
@@ -34,6 +38,9 @@ vk::Image depthImage;
 vk::DeviceMemory depthImageMemory;
 vk::ImageView depthImageView;
 
+const char* MODEL_PATH = "../../media/viking_room.obj";
+const char* TEXTURE_PATH = "../../media/viking_room.png";
+
 void CommandBuffers::init(const vk::SurfaceKHR& surface, Devices& devices, Swapchain& swapchain, int maxFramesInFlight)
 {
     QueueFamilyIndices queueFamilyIndices = devices.findQueueFamilies(surface);
@@ -44,6 +51,7 @@ void CommandBuffers::init(const vk::SurfaceKHR& surface, Devices& devices, Swapc
     this->createTextureImage(devices);
     this->createTextureImageView(devices);
     this->createTextureSampler(devices);
+    this->loadModel();
     this->createVertexBuffer(devices);
     this->createIndexBuffer(devices);
     this->createUniformBuffers(devices, maxFramesInFlight);
@@ -78,7 +86,7 @@ void CommandBuffers::recreateDepthResources(Devices& devices, Swapchain& swapcha
 void CommandBuffers::createTextureImage(Devices& devices)
 {
     int texWidth, texHeight, texChannels;
-    stbi_uc* pixels = stbi_load("../../textures/texture.jpg", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+    stbi_uc* pixels = stbi_load(TEXTURE_PATH, &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
     vk::DeviceSize imageSize = texWidth * texHeight * 4;
 
     if (!pixels)
@@ -234,6 +242,98 @@ void CommandBuffers::createTextureSampler(Devices& devices)
     textureSampler = devices.getDevice()->createSampler(samplerInfo);
 }
 
+void CommandBuffers::loadModel()
+{
+    tinyobj::attrib_t attrib;
+    std::vector<tinyobj::shape_t> shapes;
+    std::vector<tinyobj::material_t> materials;
+    std::string warn, err;
+
+    if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &err, MODEL_PATH))
+    {
+        throw std::runtime_error(warn + err);
+    }
+
+    std::unordered_map<Vertex, uint32_t> uniqueVertices;
+
+    for (const auto& shape : shapes)
+    {
+        for (const auto& index : shape.mesh.indices)
+        {
+            Vertex vertex;
+            vertex.pos =
+            {
+                attrib.vertices[3 * index.vertex_index + 0],
+                attrib.vertices[3 * index.vertex_index + 1],
+                attrib.vertices[3 * index.vertex_index + 2]
+            };
+
+            vertex.texCoord =
+            {
+                attrib.texcoords[2 * index.texcoord_index + 0],
+                1.0f - attrib.texcoords[2 * index.texcoord_index + 1]
+            };
+
+            vertex.color = { 1.0f, 1.0f, 1.0f };
+
+            model.vertices.push_back(vertex);
+
+            if (uniqueVertices.count(vertex) == 0)
+            {
+                uniqueVertices[vertex] = static_cast<uint32_t>(model.vertices.size());
+                model.vertices.push_back(vertex);
+            }
+
+            model.indices.push_back(static_cast<uint32_t>(uniqueVertices[vertex]));
+        }
+    }
+}
+
+void CommandBuffers::createVertexBuffer(Devices& devices)
+{
+    vk::Device* logicalDevice = devices.getDevice();
+    vk::DeviceSize bufferSize = sizeof(model.vertices[0]) * model.vertices.size();
+
+    vk::Buffer stagingBuffer;
+    vk::DeviceMemory stagingBufferMemory;
+    this->createBuffer(devices, bufferSize, vk::BufferUsageFlagBits::eTransferSrc,
+        vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, stagingBuffer, stagingBufferMemory);
+
+    void* data = logicalDevice->mapMemory(stagingBufferMemory, 0, bufferSize);
+    memcpy(data, model.vertices.data(), (size_t)bufferSize);
+    logicalDevice->unmapMemory(stagingBufferMemory);
+
+    this->createBuffer(devices, bufferSize, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer,
+        vk::MemoryPropertyFlagBits::eDeviceLocal, vertexBuffer, vertexBufferMemory);
+
+    this->copyBuffer(devices, stagingBuffer, vertexBuffer, bufferSize);
+
+    logicalDevice->destroyBuffer(stagingBuffer);
+    logicalDevice->freeMemory(stagingBufferMemory);
+}
+
+void CommandBuffers::createIndexBuffer(Devices& devices)
+{
+    vk::DeviceSize bufferSize = sizeof(model.indices[0]) * model.indices.size();
+    vk::Buffer stagingBuffer;
+    vk::DeviceMemory stagingBufferMemory;
+    this->createBuffer(devices, bufferSize, vk::BufferUsageFlagBits::eTransferSrc,
+        vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, stagingBuffer, stagingBufferMemory);
+
+    vk::Device* logicalDevice = devices.getDevice();
+    void* data = logicalDevice->mapMemory(stagingBufferMemory, 0, bufferSize);
+    memcpy(data, model.indices.data(), (size_t)bufferSize);
+    logicalDevice->unmapMemory(stagingBufferMemory);
+
+    this->createBuffer(devices, bufferSize, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer,
+        vk::MemoryPropertyFlagBits::eDeviceLocal, indexBuffer, indexBufferMemory);
+
+    this->copyBuffer(devices, stagingBuffer, indexBuffer, bufferSize);
+
+    logicalDevice->destroyBuffer(stagingBuffer);
+    logicalDevice->freeMemory(stagingBufferMemory);
+}
+
 void CommandBuffers::createUniformBuffers(Devices& devices, int maxFramesInFlight)
 {
     vk::DeviceSize bufferSize = sizeof(UniformBufferObject);
@@ -249,51 +349,6 @@ void CommandBuffers::createUniformBuffers(Devices& devices, int maxFramesInFligh
 
         uniformBuffersMapped[i] = devices.getDevice()->mapMemory(uniformBuffersMemory[i], 0, bufferSize);
     }
-}
-
-void CommandBuffers::createVertexBuffer(Devices& devices)
-{
-    vk::Device* logicalDevice = devices.getDevice();
-    vk::DeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
-
-    vk::Buffer stagingBuffer;
-    vk::DeviceMemory stagingBufferMemory;
-    this->createBuffer(devices, bufferSize, vk::BufferUsageFlagBits::eTransferSrc,
-        vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, stagingBuffer, stagingBufferMemory);
-
-    void* data = logicalDevice->mapMemory(stagingBufferMemory, 0, bufferSize);
-    memcpy(data, vertices.data(), (size_t)bufferSize);
-    logicalDevice->unmapMemory(stagingBufferMemory);
-
-    this->createBuffer(devices, bufferSize, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer,
-        vk::MemoryPropertyFlagBits::eDeviceLocal, vertexBuffer, vertexBufferMemory);
-
-    this->copyBuffer(devices, stagingBuffer, vertexBuffer, bufferSize);
-
-    logicalDevice->destroyBuffer(stagingBuffer);
-    logicalDevice->freeMemory(stagingBufferMemory);
-}
-
-void CommandBuffers::createIndexBuffer(Devices& devices)
-{
-    vk::DeviceSize bufferSize = sizeof(indices[0]) * indices.size();
-    vk::Buffer stagingBuffer;
-    vk::DeviceMemory stagingBufferMemory;
-    this->createBuffer(devices, bufferSize, vk::BufferUsageFlagBits::eTransferSrc,
-        vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, stagingBuffer, stagingBufferMemory);
-
-    vk::Device* logicalDevice = devices.getDevice();
-    void* data = logicalDevice->mapMemory(stagingBufferMemory, 0, bufferSize);
-    memcpy(data, indices.data(), (size_t)bufferSize);
-    logicalDevice->unmapMemory(stagingBufferMemory);
-
-    this->createBuffer(devices, bufferSize, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer,
-        vk::MemoryPropertyFlagBits::eDeviceLocal, indexBuffer, indexBufferMemory);
-
-    this->copyBuffer(devices, stagingBuffer, indexBuffer, bufferSize);
-
-    logicalDevice->destroyBuffer(stagingBuffer);
-    logicalDevice->freeMemory(stagingBufferMemory);
 }
 
 void CommandBuffers::createCommandBuffers(vk::Device* logicalDevice, int maxFramesInFlight)
@@ -399,10 +454,10 @@ void CommandBuffers::recordCommandBuffer(const vk::Extent2D& swapchainExtent, vk
     vk::Buffer vertexBuffers[] = { vertexBuffer };
     vk::DeviceSize offsets[] = { 0 };
     commandBuffer->bindVertexBuffers(0, vertexBuffers, offsets);
-    commandBuffer->bindIndexBuffer(indexBuffer, 0, vk::IndexType::eUint16);
+    commandBuffer->bindIndexBuffer(indexBuffer, 0, vk::IndexType::eUint32);
 
     commandBuffer->bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0, 1, descriptorSets, 0, nullptr);
-    commandBuffer->drawIndexed(static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
+    commandBuffer->drawIndexed(static_cast<uint32_t>(model.indices.size()), 1, 0, 0, 0);
     commandBuffer->endRenderPass();
     commandBuffer->end();
 }

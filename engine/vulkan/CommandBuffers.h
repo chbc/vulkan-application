@@ -4,6 +4,7 @@
 #include <memory>
 #include "Vertex.h"
 #include "vk_forward_declarations.h"
+#include "Model.h"
 
 class Devices;
 class Swapchain;
@@ -14,23 +15,7 @@ private:
 	std::shared_ptr<vk::CommandPool> commandPool;
 	std::vector<std::shared_ptr<vk::CommandBuffer>> commandBuffers;
 	uint32_t currentFrame = 0;
-	const std::vector<uint16_t> indices =
-	{ 
-		0, 1, 2, 2, 3, 0,
-		4, 5, 6, 6, 7, 4
-	};
-	const std::vector<Vertex> vertices =
-	{
-		{{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
-		{{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
-		{{0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
-		{{-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
-
-		{{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
-		{{0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
-		{{0.5f, 0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
-		{{-0.5f, 0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}}
-	};
+	Model model;
 
 private:
 	void init(const vk::SurfaceKHR& surface, Devices& devices, Swapchain& swapchain, int maxFramesInFlight);
@@ -45,9 +30,10 @@ private:
 	void copyBufferToImage(Devices& devices, vk::Buffer& buffer, vk::Image& image, uint32_t width, uint32_t height);
 	void createTextureImageView(Devices& devices);
 	void createTextureSampler(Devices& devices);
-	void createUniformBuffers(Devices& devices, int maxFramesInFlight);
+	void loadModel();
 	void createVertexBuffer(Devices& devices);
 	void createIndexBuffer(Devices& devices);
+	void createUniformBuffers(Devices& devices, int maxFramesInFlight);
 	void createCommandBuffers(vk::Device* logicalDevice, int maxFramesInFlight);
 	uint32_t getCurrentFrameIndex();
 	vk::ImageView& getDepthImageView();

@@ -2,6 +2,16 @@
 
 #include <vulkan/vulkan.hpp>
 
+bool Vertex::operator==(const Vertex& other) const
+{
+    return
+    (
+        (this->pos == other.pos) &&
+        (this->color == other.color) &&
+        (this->texCoord == other.texCoord)
+    );
+}
+
 vk::VertexInputBindingDescription Vertex::getBindingDescription()
 {
     vk::VertexInputBindingDescription bindingDescription = vk::VertexInputBindingDescription()
