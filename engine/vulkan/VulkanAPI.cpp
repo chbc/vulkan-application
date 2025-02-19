@@ -1,6 +1,7 @@
 #include "VulkanAPI.h"
 
 #include "engine/Utils.h"
+#include "engine/graphics/Mesh.h"
 
 #include <SDL2/SDL_vulkan.h>
 #include <vulkan/vulkan.hpp>
@@ -41,6 +42,17 @@ void VulkanAPI::init(SDLAPI& sdlApi)
     this->createDescriptorSets();
     this->commandBuffers.createCommandBuffers(this->devices.getDevice(), MAX_FRAMES_IN_FLIGHT);
     this->syncObjects.init(logicalDevice, MAX_FRAMES_IN_FLIGHT);
+}
+
+uint16_t VulkanAPI::loadMesh()
+{
+    this->commandBuffers.createMeshBuffers(this->devices, mesh);
+    return this->assetsBufferManager.loadMesh();;
+}
+
+uint16_t VulkanAPI::loadTexture()
+{
+    return this->assetsBufferManager.loadMesh();
 }
 
 void VulkanAPI::drawFrame()

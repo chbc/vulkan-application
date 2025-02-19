@@ -158,8 +158,13 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="engine\graphics\Entity.cpp" />
+    <ClCompile Include="engine\io\MeshLoader.cpp" />
+    <ClCompile Include="engine\graphics\Vertex.cpp" />
     <ClCompile Include="engine\Platform.cpp" />
+    <ClCompile Include="engine\scenes\Scene.cpp" />
     <ClCompile Include="engine\sdl\SDLAPI.cpp" />
+    <ClCompile Include="engine\vulkan\AssetHandles\AssetHandlesManager.cpp" />
     <ClCompile Include="engine\vulkan\CommandBuffers.cpp" />
     <ClCompile Include="engine\vulkan\DebugMessenger.cpp" />
     <ClCompile Include="engine\vulkan\DescriptorSets.cpp" />
@@ -168,26 +173,32 @@
     <ClCompile Include="engine\vulkan\Swapchain.cpp" />
     <ClCompile Include="engine\vulkan\SyncObjects.cpp" />
     <ClCompile Include="engine\vulkan\ValidationLayers.cpp" />
-    <ClCompile Include="engine\vulkan\Vertex.cpp" />
     <ClCompile Include="engine\vulkan\VulkanAPI.cpp" />
     <ClCompile Include="main.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="dependencies\stb_image.h" />
     <ClInclude Include="dependencies\tiny_obj_loader.h" />
+    <ClInclude Include="engine\graphics\Entity.h" />
+    <ClInclude Include="engine\graphics\Mesh.h" />
+    <ClInclude Include="engine\io\MeshLoader.h" />
+    <ClInclude Include="engine\graphics\Texture.h" />
+    <ClInclude Include="engine\graphics\Vertex.h" />
     <ClInclude Include="engine\Platform.h" />
+    <ClInclude Include="engine\scenes\Scene.h" />
     <ClInclude Include="engine\sdl\SDLAPI.h" />
     <ClInclude Include="engine\Utils.h" />
+    <ClInclude Include="engine\vulkan\AssetHandles\AssetHandlesManager.h" />
+    <ClInclude Include="engine\vulkan\AssetHandles\MeshHandle.h" />
+    <ClInclude Include="engine\vulkan\AssetHandles\TextureHandle.h" />
     <ClInclude Include="engine\vulkan\CommandBuffers.h" />
     <ClInclude Include="engine\vulkan\DebugMessenger.h" />
     <ClInclude Include="engine\vulkan\DescriptorSets.h" />
     <ClInclude Include="engine\vulkan\Devices.h" />
-    <ClInclude Include="engine\vulkan\Model.h" />
     <ClInclude Include="engine\vulkan\RenderPass.h" />
     <ClInclude Include="engine\vulkan\Swapchain.h" />
     <ClInclude Include="engine\vulkan\SyncObjects.h" />
     <ClInclude Include="engine\vulkan\ValidationLayers.h" />
-    <ClInclude Include="engine\vulkan\Vertex.h" />
     <ClInclude Include="engine\vulkan\vk_forward_declarations.h" />
     <ClInclude Include="engine\vulkan\VulkanAPI.h" />
   </ItemGroup>

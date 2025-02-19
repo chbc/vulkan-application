@@ -3,7 +3,7 @@
 #include "Vertex.h"
 #include <vector>
 
-struct Model
+struct Mesh
 {
 	std::vector<Vertex> vertices;
 	std::vector<uint32_t> indices;

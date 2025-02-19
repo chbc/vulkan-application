@@ -7,9 +7,6 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "dependencies/stb_image.h"
 
-#define TINYOBJLOADER_IMPLEMENTATION
-#include "dependencies/tiny_obj_loader.h"
-
 #include <chrono>
 #include <unordered_map>
 
@@ -20,25 +17,14 @@ struct UniformBufferObject
     glm::mat4 proj;
 };
 
-vk::Buffer vertexBuffer;
-vk::DeviceMemory vertexBufferMemory;
-vk::Buffer indexBuffer;
-vk::DeviceMemory indexBufferMemory;
-
 std::vector<vk::Buffer> uniformBuffers;
 std::vector<vk::DeviceMemory> uniformBuffersMemory;
 std::vector<void*> uniformBuffersMapped;
-
-vk::Image textureImage;
-vk::DeviceMemory textureImageMemory;
-vk::ImageView textureImageView;
-vk::Sampler textureSampler;
 
 vk::Image depthImage;
 vk::DeviceMemory depthImageMemory;
 vk::ImageView depthImageView;
 
-const char* MODEL_PATH = "../../media/viking_room.obj";
 const char* TEXTURE_PATH = "../../media/viking_room.png";
 
 void CommandBuffers::init(const vk::SurfaceKHR& surface, Devices& devices, Swapchain& swapchain, int maxFramesInFlight)
@@ -51,9 +37,10 @@ void CommandBuffers::init(const vk::SurfaceKHR& surface, Devices& devices, Swapc
     this->createTextureImage(devices);
     this->createTextureImageView(devices);
     this->createTextureSampler(devices);
-    this->loadModel();
-    this->createVertexBuffer(devices);
-    this->createIndexBuffer(devices);
+
+
+
+
     this->createUniformBuffers(devices, maxFramesInFlight);
 }
 
@@ -242,57 +229,16 @@ void CommandBuffers::createTextureSampler(Devices& devices)
     textureSampler = devices.getDevice()->createSampler(samplerInfo);
 }
 
-void CommandBuffers::loadModel()
+void CommandBuffers::createMeshBuffers(Devices& devices, Mesh* mesh)
 {
-    tinyobj::attrib_t attrib;
-    std::vector<tinyobj::shape_t> shapes;
-    std::vector<tinyobj::material_t> materials;
-    std::string warn, err;
-
-    if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &err, MODEL_PATH))
-    {
-        throw std::runtime_error(warn + err);
-    }
-
-    std::unordered_map<Vertex, uint32_t> uniqueVertices;
-
-    for (const auto& shape : shapes)
-    {
-        for (const auto& index : shape.mesh.indices)
-        {
-            Vertex vertex;
-            vertex.pos =
-            {
-                attrib.vertices[3 * index.vertex_index + 0],
-                attrib.vertices[3 * index.vertex_index + 1],
-                attrib.vertices[3 * index.vertex_index + 2]
-            };
-
-            vertex.texCoord =
-            {
-                attrib.texcoords[2 * index.texcoord_index + 0],
-                1.0f - attrib.texcoords[2 * index.texcoord_index + 1]
-            };
-
-            vertex.color = { 1.0f, 1.0f, 1.0f };
-
-            model.vertices.push_back(vertex);
-
-            if (uniqueVertices.count(vertex) == 0)
-            {
-                uniqueVertices[vertex] = static_cast<uint32_t>(model.vertices.size());
-                model.vertices.push_back(vertex);
-            }
-
-            model.indices.push_back(static_cast<uint32_t>(uniqueVertices[vertex]));
-        }
-    }
+    this->createVertexBuffer(devices, mesh);
+    this->createIndexBuffer(devices, mesh);
 }
 
-void CommandBuffers::createVertexBuffer(Devices& devices)
+void CommandBuffers::createVertexBuffer(Devices& devices, Mesh* mesh)
 {
     vk::Device* logicalDevice = devices.getDevice();
-    vk::DeviceSize bufferSize = sizeof(model.vertices[0]) * model.vertices.size();
+    vk::DeviceSize bufferSize = sizeof(mesh->vertices[0]) * mesh->vertices.size();
 
     vk::Buffer stagingBuffer;
     vk::DeviceMemory stagingBufferMemory;
@@ -300,7 +246,7 @@ void CommandBuffers::createVertexBuffer(Devices& devices)
         vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, stagingBuffer, stagingBufferMemory);
 
     void* data = logicalDevice->mapMemory(stagingBufferMemory, 0, bufferSize);
-    memcpy(data, model.vertices.data(), (size_t)bufferSize);
+    memcpy(data, mesh->vertices.data(), (size_t)bufferSize);
     logicalDevice->unmapMemory(stagingBufferMemory);
 
     this->createBuffer(devices, bufferSize, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer,
@@ -312,9 +258,9 @@ void CommandBuffers::createVertexBuffer(Devices& devices)
     logicalDevice->freeMemory(stagingBufferMemory);
 }
 
-void CommandBuffers::createIndexBuffer(Devices& devices)
+void CommandBuffers::createIndexBuffer(Devices& devices, Mesh* mesh)
 {
-    vk::DeviceSize bufferSize = sizeof(model.indices[0]) * model.indices.size();
+    vk::DeviceSize bufferSize = sizeof(mesh->indices[0]) * mesh->indices.size();
     vk::Buffer stagingBuffer;
     vk::DeviceMemory stagingBufferMemory;
     this->createBuffer(devices, bufferSize, vk::BufferUsageFlagBits::eTransferSrc,
@@ -322,7 +268,7 @@ void CommandBuffers::createIndexBuffer(Devices& devices)
 
     vk::Device* logicalDevice = devices.getDevice();
     void* data = logicalDevice->mapMemory(stagingBufferMemory, 0, bufferSize);
-    memcpy(data, model.indices.data(), (size_t)bufferSize);
+    memcpy(data, mesh->indices.data(), (size_t)bufferSize);
     logicalDevice->unmapMemory(stagingBufferMemory);
 
     this->createBuffer(devices, bufferSize, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer,
@@ -457,7 +403,7 @@ void CommandBuffers::recordCommandBuffer(const vk::Extent2D& swapchainExtent, vk
     commandBuffer->bindIndexBuffer(indexBuffer, 0, vk::IndexType::eUint32);
 
     commandBuffer->bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0, 1, descriptorSets, 0, nullptr);
-    commandBuffer->drawIndexed(static_cast<uint32_t>(model.indices.size()), 1, 0, 0, 0);
+    commandBuffer->drawIndexed(static_cast<uint32_t>(mesh.indices.size()), 1, 0, 0, 0);
     commandBuffer->endRenderPass();
     commandBuffer->end();
 }

@@ -15,6 +15,16 @@ void Platform::init()
     vulkanApi.init(sdlApi);
 }
 
+uint16_t Platform::loadMesh()
+{
+    return vulkanApi.loadMesh();
+}
+
+uint16_t Platform::loadTexture()
+{
+    return vulkanApi.loadTexture();
+}
+
 void Platform::processInput(bool& stillRunning)
 {
     sdlApi.processInput(stillRunning);

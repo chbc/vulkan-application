@@ -2,12 +2,13 @@
 
 #include <vector>
 #include <memory>
-#include "Vertex.h"
 #include "vk_forward_declarations.h"
-#include "Model.h"
+#include "io/Vertex.h"
+#include "io/Mesh.h"
 
 class Devices;
 class Swapchain;
+struct Mesh;
 
 class CommandBuffers
 {
@@ -15,7 +16,6 @@ private:
 	std::shared_ptr<vk::CommandPool> commandPool;
 	std::vector<std::shared_ptr<vk::CommandBuffer>> commandBuffers;
 	uint32_t currentFrame = 0;
-	Model model;
 
 private:
 	void init(const vk::SurfaceKHR& surface, Devices& devices, Swapchain& swapchain, int maxFramesInFlight);
@@ -30,9 +30,9 @@ private:
 	void copyBufferToImage(Devices& devices, vk::Buffer& buffer, vk::Image& image, uint32_t width, uint32_t height);
 	void createTextureImageView(Devices& devices);
 	void createTextureSampler(Devices& devices);
-	void loadModel();
-	void createVertexBuffer(Devices& devices);
-	void createIndexBuffer(Devices& devices);
+	void createMeshBuffers(Devices& devices, Mesh* mesh);
+	void createVertexBuffer(Devices& devices, Mesh* mesh);
+	void createIndexBuffer(Devices& devices, Mesh* mesh);
 	void createUniformBuffers(Devices& devices, int maxFramesInFlight);
 	void createCommandBuffers(vk::Device* logicalDevice, int maxFramesInFlight);
 	uint32_t getCurrentFrameIndex();

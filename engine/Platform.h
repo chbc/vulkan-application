@@ -11,6 +11,8 @@ private:
 public:
 	~Platform();
 	void init();
+	uint16_t loadMesh();
+	uint16_t loadTexture();
 	void processInput(bool& stillRunning);
 	void drawFrame();
 	void processFrameEnd();

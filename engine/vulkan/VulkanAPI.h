@@ -8,16 +8,17 @@
 #include "engine/sdl/SDLAPI.h"
 #include "DebugMessenger.h"
 #include "ValidationLayers.h"
-#include "Devices.h"
 #include "SwapChain.h"
 #include "RenderPass.h"
 #include "DescriptorSets.h"
 #include "CommandBuffers.h"
 #include "SyncObjects.h"
+#include "assetBuffers/AssetBuffersManager.h"
 
 #include <vector>
 
 struct SwapChainSupportDetails;
+struct Mesh;
 
 class VulkanAPI
 {
@@ -25,17 +26,19 @@ private:
 	SDLAPI *sdlApi;
 	DebugMessenger debugMessenger;
 	ValidationLayers validationLayers;
-	Devices devices;
 	Swapchain swapchain;
 	RenderPass renderPass;
 	DescriptorSets descriptorSets;
 	CommandBuffers commandBuffers;
 	SyncObjects syncObjects;
+	AssetBuffersManager assetsBufferManager;
 
 	bool framebufferResized = false;
 
 public:
 	void init(SDLAPI& sdlApi);
+	uint16_t loadMesh();
+	uint16_t loadTexture();
 	void drawFrame();
 
 private:
