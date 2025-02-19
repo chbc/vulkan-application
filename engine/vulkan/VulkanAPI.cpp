@@ -46,8 +46,9 @@ void VulkanAPI::init(SDLAPI& sdlApi)
 
 uint16_t VulkanAPI::loadMesh()
 {
+    Mesh* mesh = assetsBufferManager.loadMesh()
     this->commandBuffers.createMeshBuffers(this->devices, mesh);
-    return this->assetsBufferManager.loadMesh();;
+    return this->assetsBufferManager.loadMesh();
 }
 
 uint16_t VulkanAPI::loadTexture()

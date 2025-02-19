@@ -9,6 +9,7 @@ Scene::Scene()
 
 void Scene::init()
 {
+	AssetBuffersManager::loadMesh()
 	Entity* entity = new Entity{ mesh, new Texture };
 	this->entities.emplace_back(entity);
 }

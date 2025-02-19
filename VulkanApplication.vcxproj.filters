@@ -67,6 +67,15 @@
     <ClCompile Include="engine\vulkan\AssetHandles\AssetHandlesManager.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="engine\vulkan\assetBuffers\AssetBuffersManager.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="engine\vulkan\io\MeshLoader.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="engine\vulkan\io\Vertex.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="engine\vulkan\VulkanAPI.h">
@@ -139,6 +148,24 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="engine\vulkan\AssetHandles\AssetHandlesManager.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="engine\vulkan\assetBuffers\AssetBuffersManager.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="engine\vulkan\assetBuffers\MeshBufferData.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="engine\vulkan\assetBuffers\TextureBufferData.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="engine\vulkan\io\Mesh.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="engine\vulkan\io\MeshLoader.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="engine\vulkan\io\Vertex.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
