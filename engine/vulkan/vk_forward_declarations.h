@@ -23,6 +23,8 @@ namespace vk
 	class DescriptorSet;
 	class Image;
 	class ImageView;
+	class Semaphore;
+	class Fence;
 	
 	struct PipelineLayoutCreateInfo;
 	struct SurfaceFormatKHR;
