@@ -15,6 +15,21 @@ void Platform::init()
     vulkanApi.init(sdlApi);
 }
 
+void Platform::loadModel(const char* filePath)
+{
+    vulkanApi.loadModel(filePath);
+}
+
+void Platform::loadTexture(const char* filePath)
+{
+    vulkanApi.loadTexture(filePath);
+}
+
+void Platform::updateDescriptorSets()
+{
+    vulkanApi.updateDescriptorSets();
+}
+
 void Platform::processInput(bool& stillRunning)
 {
     sdlApi.processInput(stillRunning);

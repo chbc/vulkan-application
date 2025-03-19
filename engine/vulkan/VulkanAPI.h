@@ -84,22 +84,22 @@ private:
 	//
 
 	// CommandBuffers
-	void CommandBuffers_init(const vk::SurfaceKHR& surface, int maxFramesInFlight);
+	void loadModel(const char* filePath);
+	void loadTexture(const char* filePath);
+	void updateDescriptorSets();
+	void CommandBuffers_init(const vk::SurfaceKHR& surface);
 	void CommandBuffers_createCommandPool(vk::Device* logicalDevice, uint32_t queueFamilyIndex);
 	void CommandBuffers_createDepthResources();
 	void CommandBuffers_recreateDepthResources();
-	void CommandBuffers_createTextureImage();
 	void CommandBuffers_createImage(uint32_t widith, uint32_t height, vk::Format format, vk::ImageTiling tiling,
 		vk::ImageUsageFlags usage, vk::MemoryPropertyFlags properties, vk::Image& image, vk::DeviceMemory& imageMemory);
 	void CommandBuffers_transitionImageLayout(vk::Image& image, vk::Format format,
 		vk::ImageLayout oldLayout, vk::ImageLayout newLayout);
 	void CommandBuffers_copyBufferToImage(vk::Buffer& buffer, vk::Image& image, uint32_t width, uint32_t height);
-	void CommandBuffers_createTextureImageView();
 	void CommandBuffers_createTextureSampler();
-	void CommandBuffers_loadModel();
 	void CommandBuffers_createVertexBuffer();
 	void CommandBuffers_createIndexBuffer();
-	void CommandBuffers_createUniformBuffers(int maxFramesInFlight);
+	void CommandBuffers_createUniformBuffers();
 	void CommandBuffers_createCommandBuffers(vk::Device* logicalDevice, int maxFramesInFlight);
 	uint32_t CommandBuffers_getCurrentFrameIndex();
 	vk::ImageView& CommandBuffers_getDepthImageView();

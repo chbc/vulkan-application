@@ -41,9 +41,13 @@ Create and destroy a Vulkan surface on an SDL window.
 int main()
 {
     Platform platform;
+
     try
     {
         platform.init();
+        platform.loadModel("../../media/viking_room.obj");
+        platform.loadTexture("../../media/viking_room.png");
+        platform.updateDescriptorSets();
     }
     catch (const std::exception& e)
     {

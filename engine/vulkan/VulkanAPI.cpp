@@ -104,9 +104,6 @@ vk::Sampler textureSampler;
 vk::Image depthImage;
 vk::DeviceMemory depthImageMemory;
 vk::ImageView depthImageView;
-
-const char* MODEL_PATH = "../../media/viking_room.obj";
-const char* TEXTURE_PATH = "../../media/viking_room.png";
 //
 
 // SyncObjects
@@ -132,7 +129,7 @@ void VulkanAPI::init(SDLAPI& sdlApi)
     this->DescriptorSets_initLayout(logicalDevice);
     this->createGraphicsPipeline();
 
-    this->CommandBuffers_init(surface, MAX_FRAMES_IN_FLIGHT);
+    this->CommandBuffers_init(surface);
     vk::ImageView& depthImageView = this->CommandBuffers_getDepthImageView();
     this->Swapchain_createFramebuffers(this->RenderPass_getRenderPassRef(), depthImageView);
 
@@ -432,31 +429,6 @@ void VulkanAPI::createDescriptorSets()
 {
     vk::Device* logicalDevice = this->Devices_getDevice();
     this->DescriptorSets_initDescriptorSet(logicalDevice, MAX_FRAMES_IN_FLIGHT);
-
-    for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
-    {
-        vk::DescriptorSet& descriptorSet = this->DescriptorSets_getDescriptorSet(i);
-        vk::DescriptorBufferInfo bufferInfo;
-        vk::DescriptorImageInfo imageInfo;
-        this->CommandBuffers_createDescriptorsBufferInfo(i, bufferInfo, imageInfo);
-
-        std::array<vk::WriteDescriptorSet, 2> descriptorWrites;
-        descriptorWrites[0].setDstSet(descriptorSet)
-            .setDstBinding(0)
-            .setDstArrayElement(0)
-            .setDescriptorType(vk::DescriptorType::eUniformBuffer)
-            .setDescriptorCount(1)
-            .setBufferInfo(bufferInfo);
-        
-        descriptorWrites[1].setDstSet(descriptorSet)
-            .setDstBinding(1)
-            .setDstArrayElement(0)
-            .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
-            .setDescriptorCount(1)
-            .setImageInfo(imageInfo);
-
-        logicalDevice->updateDescriptorSets(descriptorWrites, nullptr);
-    }
 }
 
 vk::ShaderModule VulkanAPI::createShaderModule(const std::vector<char>& code)
@@ -1048,20 +1020,133 @@ void VulkanAPI::DescriptorSets_release(vk::Device* logicalDevice)
 //
 
 // CommandBuffers
-void VulkanAPI::CommandBuffers_init(const vk::SurfaceKHR& surface, int maxFramesInFlight)
+void VulkanAPI::loadModel(const char* filePath)
+{
+    tinyobj::attrib_t attrib;
+    std::vector<tinyobj::shape_t> shapes;
+    std::vector<tinyobj::material_t> materials;
+    std::string error;
+
+    if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &error, filePath))
+    {
+        throw std::runtime_error(error);
+    }
+
+    std::unordered_map<Vertex, uint32_t> uniqueVertices;
+
+    for (const auto& shape : shapes)
+    {
+        for (const auto& index : shape.mesh.indices)
+        {
+            Vertex vertex;
+            vertex.pos =
+            {
+                attrib.vertices[3 * index.vertex_index + 0],
+                attrib.vertices[3 * index.vertex_index + 1],
+                attrib.vertices[3 * index.vertex_index + 2]
+            };
+
+            vertex.texCoord =
+            {
+                attrib.texcoords[2 * index.texcoord_index + 0],
+                1.0f - attrib.texcoords[2 * index.texcoord_index + 1]
+            };
+
+            vertex.color = { 1.0f, 1.0f, 1.0f };
+
+            model.vertices.push_back(vertex);
+
+            if (uniqueVertices.count(vertex) == 0)
+            {
+                uniqueVertices[vertex] = static_cast<uint32_t>(model.vertices.size());
+                model.vertices.push_back(vertex);
+            }
+
+            model.indices.push_back(static_cast<uint32_t>(uniqueVertices[vertex]));
+        }
+    }
+
+    this->CommandBuffers_createVertexBuffer();
+    this->CommandBuffers_createIndexBuffer();
+    this->CommandBuffers_createUniformBuffers();
+}
+
+void VulkanAPI::loadTexture(const char* filePath)
+{
+    int texWidth, texHeight, texChannels;
+    stbi_uc* pixels = stbi_load(filePath, &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+    vk::DeviceSize imageSize = texWidth * texHeight * 4;
+
+    if (!pixels)
+    {
+        throw std::runtime_error("Failed to load texture image!");
+    }
+
+    vk::Buffer stagingBuffer;
+    vk::DeviceMemory stagingBufferMemory;
+    this->CommandBuffers_createBuffer(imageSize, vk::BufferUsageFlagBits::eTransferSrc,
+        vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, stagingBuffer, stagingBufferMemory);
+
+    vk::Device* logicalDevice = Devices_getDevice();
+    void* data = logicalDevice->mapMemory(stagingBufferMemory, 0, imageSize);
+    memcpy(data, pixels, static_cast<size_t>(imageSize));
+    logicalDevice->unmapMemory(stagingBufferMemory);
+
+    stbi_image_free(pixels);
+
+    this->CommandBuffers_createImage(static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight), vk::Format::eR8G8B8A8Srgb, vk::ImageTiling::eOptimal,
+        vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal,
+        textureImage, textureImageMemory);
+
+    textureImageView = Devices_createImageView(textureImage, vk::Format::eR8G8B8A8Srgb, vk::ImageAspectFlagBits::eColor);
+
+    this->CommandBuffers_transitionImageLayout(textureImage, vk::Format::eR8G8B8A8Srgb, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
+    this->CommandBuffers_copyBufferToImage(stagingBuffer, textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
+    this->CommandBuffers_transitionImageLayout(textureImage, vk::Format::eR8G8B8A8Srgb, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
+
+    logicalDevice->destroyBuffer(stagingBuffer);
+    logicalDevice->freeMemory(stagingBufferMemory);
+}
+
+void VulkanAPI::updateDescriptorSets()
+{
+    for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+    {
+        vk::DescriptorSet& descriptorSet = this->DescriptorSets_getDescriptorSet(i);
+        vk::DescriptorBufferInfo bufferInfo;
+        vk::DescriptorImageInfo imageInfo;
+
+        bufferInfo = vk::DescriptorBufferInfo(uniformBuffers[i], 0, sizeof(UniformBufferObject));
+        imageInfo = vk::DescriptorImageInfo(textureSampler, textureImageView, vk::ImageLayout::eShaderReadOnlyOptimal);
+
+        std::array<vk::WriteDescriptorSet, 2> descriptorWrites;
+        descriptorWrites[0].setDstSet(descriptorSet)
+            .setDstBinding(0)
+            .setDstArrayElement(0)
+            .setDescriptorType(vk::DescriptorType::eUniformBuffer)
+            .setDescriptorCount(1)
+            .setBufferInfo(bufferInfo);
+
+        descriptorWrites[1].setDstSet(descriptorSet)
+            .setDstBinding(1)
+            .setDstArrayElement(0)
+            .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
+            .setDescriptorCount(1)
+            .setImageInfo(imageInfo);
+
+        logicalDevice->updateDescriptorSets(descriptorWrites, nullptr);
+    }
+}
+
+void VulkanAPI::CommandBuffers_init(const vk::SurfaceKHR& surface)
 {
     QueueFamilyIndices queueFamilyIndices = Devices_findQueueFamilies(surface);
 
     vk::Device* logicalDevice = Devices_getDevice();
     this->CommandBuffers_createCommandPool(logicalDevice, queueFamilyIndices.graphicsFamily.value());
     this->CommandBuffers_createDepthResources();
-    this->CommandBuffers_createTextureImage();
-    this->CommandBuffers_createTextureImageView();
+
     this->CommandBuffers_createTextureSampler();
-    this->CommandBuffers_loadModel();
-    this->CommandBuffers_createVertexBuffer();
-    this->CommandBuffers_createIndexBuffer();
-    this->CommandBuffers_createUniformBuffers(maxFramesInFlight);
 }
 
 void VulkanAPI::CommandBuffers_createCommandPool(vk::Device* logicalDevice, uint32_t queueFamilyIndex)
@@ -1088,41 +1173,6 @@ void VulkanAPI::CommandBuffers_recreateDepthResources()
 {
     this->CommandBuffers_releaseDepthImages(Devices_getDevice());
     this->CommandBuffers_createDepthResources();
-}
-
-void VulkanAPI::CommandBuffers_createTextureImage()
-{
-    int texWidth, texHeight, texChannels;
-    stbi_uc* pixels = stbi_load(TEXTURE_PATH, &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
-    vk::DeviceSize imageSize = texWidth * texHeight * 4;
-
-    if (!pixels)
-    {
-        throw std::runtime_error("Failed to load texture image!");
-    }
-
-    vk::Buffer stagingBuffer;
-    vk::DeviceMemory stagingBufferMemory;
-    this->CommandBuffers_createBuffer(imageSize, vk::BufferUsageFlagBits::eTransferSrc,
-        vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, stagingBuffer, stagingBufferMemory);
-
-    vk::Device* logicalDevice = Devices_getDevice();
-    void* data = logicalDevice->mapMemory(stagingBufferMemory, 0, imageSize);
-    memcpy(data, pixels, static_cast<size_t>(imageSize));
-    logicalDevice->unmapMemory(stagingBufferMemory);
-
-    stbi_image_free(pixels);
-
-    this->CommandBuffers_createImage(static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight), vk::Format::eR8G8B8A8Srgb, vk::ImageTiling::eOptimal,
-        vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal,
-        textureImage, textureImageMemory);
-
-    this->CommandBuffers_transitionImageLayout(textureImage, vk::Format::eR8G8B8A8Srgb, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
-    this->CommandBuffers_copyBufferToImage(stagingBuffer, textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
-    this->CommandBuffers_transitionImageLayout(textureImage, vk::Format::eR8G8B8A8Srgb, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
-
-    logicalDevice->destroyBuffer(stagingBuffer);
-    logicalDevice->freeMemory(stagingBufferMemory);
 }
 
 void VulkanAPI::CommandBuffers_createImage(uint32_t widith, uint32_t height, vk::Format format, vk::ImageTiling tiling,
@@ -1220,11 +1270,6 @@ void VulkanAPI::CommandBuffers_copyBufferToImage(vk::Buffer& buffer, vk::Image& 
     this->CommandBuffers_endSingleTimeCommands(commandBuffer);
 }
 
-void VulkanAPI::CommandBuffers_createTextureImageView()
-{
-    textureImageView = Devices_createImageView(textureImage, vk::Format::eR8G8B8A8Srgb, vk::ImageAspectFlagBits::eColor);
-}
-
 void VulkanAPI::CommandBuffers_createTextureSampler()
 {
     vk::PhysicalDeviceProperties properties = Devices_getPhysicalDevice()->getProperties();
@@ -1247,53 +1292,6 @@ void VulkanAPI::CommandBuffers_createTextureSampler()
         .setMaxLod(0.0f);
 
     textureSampler = Devices_getDevice()->createSampler(samplerInfo);
-}
-
-void VulkanAPI::CommandBuffers_loadModel()
-{
-    tinyobj::attrib_t attrib;
-    std::vector<tinyobj::shape_t> shapes;
-    std::vector<tinyobj::material_t> materials;
-    std::string warn, err;
-
-    if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &err, MODEL_PATH))
-    {
-        throw std::runtime_error(warn + err);
-    }
-
-    std::unordered_map<Vertex, uint32_t> uniqueVertices;
-
-    for (const auto& shape : shapes)
-    {
-        for (const auto& index : shape.mesh.indices)
-        {
-            Vertex vertex;
-            vertex.pos =
-            {
-                attrib.vertices[3 * index.vertex_index + 0],
-                attrib.vertices[3 * index.vertex_index + 1],
-                attrib.vertices[3 * index.vertex_index + 2]
-            };
-
-            vertex.texCoord =
-            {
-                attrib.texcoords[2 * index.texcoord_index + 0],
-                1.0f - attrib.texcoords[2 * index.texcoord_index + 1]
-            };
-
-            vertex.color = { 1.0f, 1.0f, 1.0f };
-
-            model.vertices.push_back(vertex);
-
-            if (uniqueVertices.count(vertex) == 0)
-            {
-                uniqueVertices[vertex] = static_cast<uint32_t>(model.vertices.size());
-                model.vertices.push_back(vertex);
-            }
-
-            model.indices.push_back(static_cast<uint32_t>(uniqueVertices[vertex]));
-        }
-    }
 }
 
 void VulkanAPI::CommandBuffers_createVertexBuffer()
@@ -1341,15 +1339,15 @@ void VulkanAPI::CommandBuffers_createIndexBuffer()
     logicalDevice->freeMemory(stagingBufferMemory);
 }
 
-void VulkanAPI::CommandBuffers_createUniformBuffers(int maxFramesInFlight)
+void VulkanAPI::CommandBuffers_createUniformBuffers()
 {
     vk::DeviceSize bufferSize = sizeof(UniformBufferObject);
 
-    uniformBuffers.resize(maxFramesInFlight);
-    uniformBuffersMemory.resize(maxFramesInFlight);
-    uniformBuffersMapped.resize(maxFramesInFlight);
+    uniformBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+    uniformBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT);
+    uniformBuffersMapped.resize(MAX_FRAMES_IN_FLIGHT);
 
-    for (size_t i = 0; i < maxFramesInFlight; i++)
+    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
     {
         this->CommandBuffers_createBuffer(bufferSize, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible |
             vk::MemoryPropertyFlagBits::eHostCoherent, uniformBuffers[i], uniformBuffersMemory[i]);
@@ -1524,8 +1522,7 @@ void VulkanAPI::CommandBuffers_increaseFrame(int maxFramesInFlight)
 
 void VulkanAPI::CommandBuffers_createDescriptorsBufferInfo(size_t index, vk::DescriptorBufferInfo& bufferInfo, vk::DescriptorImageInfo& imageInfo)
 {
-    bufferInfo = vk::DescriptorBufferInfo(uniformBuffers[index], 0, sizeof(UniformBufferObject));
-    imageInfo = vk::DescriptorImageInfo(textureSampler, textureImageView, vk::ImageLayout::eShaderReadOnlyOptimal);
+
 }
 
 void VulkanAPI::CommandBuffers_releaseUniformBuffers(vk::Device* logicalDevice, size_t maxFramesInFlight)
