@@ -6,9 +6,12 @@
 #include "vk_forward_declarations.h"
 
 #include <vector>
+#include <memory>
 
 struct SwapChainSupportDetails;
 struct QueueFamilyIndices;
+struct Model;
+struct ModelBuffers;
 
 class VulkanAPI
 {
@@ -16,6 +19,7 @@ private:
 	SDLAPI *sdlApi;
 	DebugMessenger debugMessenger;
 	ValidationLayers validationLayers;
+	std::vector<std::shared_ptr<ModelBuffers>> modelBuffersMap;
 
 	bool framebufferResized = false;
 
@@ -84,7 +88,7 @@ private:
 	//
 
 	// CommandBuffers
-	void loadModel(const char* filePath);
+	size_t loadModel(const char* filePath);
 	void loadTexture(const char* filePath);
 	void updateDescriptorSets();
 	void CommandBuffers_init(const vk::SurfaceKHR& surface);
@@ -97,8 +101,8 @@ private:
 		vk::ImageLayout oldLayout, vk::ImageLayout newLayout);
 	void CommandBuffers_copyBufferToImage(vk::Buffer& buffer, vk::Image& image, uint32_t width, uint32_t height);
 	void CommandBuffers_createTextureSampler();
-	void CommandBuffers_createVertexBuffer();
-	void CommandBuffers_createIndexBuffer();
+	void CommandBuffers_createVertexBuffer(const Model& model, ModelBuffers* modelBuffers);
+	void CommandBuffers_createIndexBuffer(const Model& model, ModelBuffers* modelBuffers);
 	void CommandBuffers_createUniformBuffers();
 	void CommandBuffers_createCommandBuffers(vk::Device* logicalDevice, int maxFramesInFlight);
 	uint32_t CommandBuffers_getCurrentFrameIndex();

@@ -34,22 +34,10 @@
     <ClCompile Include="engine\vulkan\ValidationLayers.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="engine\vulkan\Devices.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="engine\vulkan\Swapchain.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="engine\vulkan\RenderPass.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="engine\vulkan\DescriptorSets.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="engine\vulkan\CommandBuffers.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="engine\vulkan\Vertex.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="engine\mediaLoader\MediaLoader.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -72,22 +60,7 @@
     <ClInclude Include="engine\vulkan\ValidationLayers.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="engine\vulkan\Devices.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="engine\vulkan\vk_forward_declarations.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="engine\vulkan\Swapchain.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="engine\vulkan\RenderPass.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="engine\vulkan\DescriptorSets.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="engine\vulkan\CommandBuffers.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="engine\vulkan\Vertex.h">
@@ -100,6 +73,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="dependencies\tiny_obj_loader.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="engine\mediaLoader\MediaLoader.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

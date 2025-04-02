@@ -1,7 +1,7 @@
 #include "VulkanAPI.h"
 
 #include "engine/Utils.h"
-#include "Model.h"
+#include "engine/mediaLoader/MediaLoader.h"
 
 #include <SDL2/SDL_vulkan.h>
 #include <vulkan/vulkan.hpp>
@@ -11,12 +11,6 @@
 #include <chrono>
 #include <optional>
 #include <set>
-
-#define STB_IMAGE_IMPLEMENTATION
-#include "dependencies/stb_image.h"
-
-#define TINYOBJLOADER_IMPLEMENTATION
-#include "dependencies/tiny_obj_loader.h"
 
 vk::SurfaceKHR surface = nullptr;
 vk::Instance instance = nullptr;
@@ -75,10 +69,18 @@ vk::DescriptorPool descriptorPool;
 //
 
 // CommandBuffers
+struct ModelBuffers
+{
+    size_t indicesSize{ 0 };
+    vk::Buffer vertexBuffer;
+    vk::DeviceMemory vertexBufferMemory;
+    vk::Buffer indexBuffer;
+    vk::DeviceMemory indexBufferMemory;
+};
+
 std::shared_ptr<vk::CommandPool> commandPool;
 std::vector<std::shared_ptr<vk::CommandBuffer>> commandBuffers;
 uint32_t currentFrame = 0;
-Model model;
 
 struct UniformBufferObject
 {
@@ -86,11 +88,6 @@ struct UniformBufferObject
     glm::mat4 view;
     glm::mat4 proj;
 };
-
-vk::Buffer vertexBuffer;
-vk::DeviceMemory vertexBufferMemory;
-vk::Buffer indexBuffer;
-vk::DeviceMemory indexBufferMemory;
 
 std::vector<vk::Buffer> uniformBuffers;
 std::vector<vk::DeviceMemory> uniformBuffersMemory;
@@ -1020,68 +1017,29 @@ void VulkanAPI::DescriptorSets_release(vk::Device* logicalDevice)
 //
 
 // CommandBuffers
-void VulkanAPI::loadModel(const char* filePath)
+size_t VulkanAPI::loadModel(const char* filePath)
 {
-    tinyobj::attrib_t attrib;
-    std::vector<tinyobj::shape_t> shapes;
-    std::vector<tinyobj::material_t> materials;
-    std::string error;
+    Model model;
+    MediaLoader::loadModel(filePath, model);
+    std::shared_ptr<ModelBuffers> modelBuffers{ new ModelBuffers };
+    modelBuffers->indicesSize = model.indices.size();
 
-    if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &error, filePath))
-    {
-        throw std::runtime_error(error);
-    }
-
-    std::unordered_map<Vertex, uint32_t> uniqueVertices;
-
-    for (const auto& shape : shapes)
-    {
-        for (const auto& index : shape.mesh.indices)
-        {
-            Vertex vertex;
-            vertex.pos =
-            {
-                attrib.vertices[3 * index.vertex_index + 0],
-                attrib.vertices[3 * index.vertex_index + 1],
-                attrib.vertices[3 * index.vertex_index + 2]
-            };
-
-            vertex.texCoord =
-            {
-                attrib.texcoords[2 * index.texcoord_index + 0],
-                1.0f - attrib.texcoords[2 * index.texcoord_index + 1]
-            };
-
-            vertex.color = { 1.0f, 1.0f, 1.0f };
-
-            model.vertices.push_back(vertex);
-
-            if (uniqueVertices.count(vertex) == 0)
-            {
-                uniqueVertices[vertex] = static_cast<uint32_t>(model.vertices.size());
-                model.vertices.push_back(vertex);
-            }
-
-            model.indices.push_back(static_cast<uint32_t>(uniqueVertices[vertex]));
-        }
-    }
-
-    this->CommandBuffers_createVertexBuffer();
-    this->CommandBuffers_createIndexBuffer();
+    this->CommandBuffers_createVertexBuffer(model, modelBuffers.get());
+    this->CommandBuffers_createIndexBuffer(model, modelBuffers.get());
     this->CommandBuffers_createUniformBuffers();
+
+    size_t result = this->modelBuffersMap.size();
+    this->modelBuffersMap.emplace_back(modelBuffers);
+
+    return result;
 }
 
 void VulkanAPI::loadTexture(const char* filePath)
 {
-    int texWidth, texHeight, texChannels;
-    stbi_uc* pixels = stbi_load(filePath, &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+    int texWidth, texHeight;
+    unsigned char* pixels = MediaLoader::loadTexture(filePath, texWidth, texHeight);
+
     vk::DeviceSize imageSize = texWidth * texHeight * 4;
-
-    if (!pixels)
-    {
-        throw std::runtime_error("Failed to load texture image!");
-    }
-
     vk::Buffer stagingBuffer;
     vk::DeviceMemory stagingBufferMemory;
     this->CommandBuffers_createBuffer(imageSize, vk::BufferUsageFlagBits::eTransferSrc,
@@ -1092,7 +1050,7 @@ void VulkanAPI::loadTexture(const char* filePath)
     memcpy(data, pixels, static_cast<size_t>(imageSize));
     logicalDevice->unmapMemory(stagingBufferMemory);
 
-    stbi_image_free(pixels);
+    MediaLoader::freePixels(pixels);
 
     this->CommandBuffers_createImage(static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight), vk::Format::eR8G8B8A8Srgb, vk::ImageTiling::eOptimal,
         vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal,
@@ -1294,7 +1252,7 @@ void VulkanAPI::CommandBuffers_createTextureSampler()
     textureSampler = Devices_getDevice()->createSampler(samplerInfo);
 }
 
-void VulkanAPI::CommandBuffers_createVertexBuffer()
+void VulkanAPI::CommandBuffers_createVertexBuffer(const Model& model, ModelBuffers* modelBuffers)
 {
     vk::Device* logicalDevice = Devices_getDevice();
     vk::DeviceSize bufferSize = sizeof(model.vertices[0]) * model.vertices.size();
@@ -1309,15 +1267,15 @@ void VulkanAPI::CommandBuffers_createVertexBuffer()
     logicalDevice->unmapMemory(stagingBufferMemory);
 
     this->CommandBuffers_createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer,
-        vk::MemoryPropertyFlagBits::eDeviceLocal, vertexBuffer, vertexBufferMemory);
+        vk::MemoryPropertyFlagBits::eDeviceLocal, modelBuffers->vertexBuffer, modelBuffers->vertexBufferMemory);
 
-    this->CommandBuffers_copyBuffer(stagingBuffer, vertexBuffer, bufferSize);
+    this->CommandBuffers_copyBuffer(stagingBuffer, modelBuffers->vertexBuffer, bufferSize);
 
     logicalDevice->destroyBuffer(stagingBuffer);
     logicalDevice->freeMemory(stagingBufferMemory);
 }
 
-void VulkanAPI::CommandBuffers_createIndexBuffer()
+void VulkanAPI::CommandBuffers_createIndexBuffer(const Model& model, ModelBuffers* modelBuffers)
 {
     vk::DeviceSize bufferSize = sizeof(model.indices[0]) * model.indices.size();
     vk::Buffer stagingBuffer;
@@ -1331,9 +1289,9 @@ void VulkanAPI::CommandBuffers_createIndexBuffer()
     logicalDevice->unmapMemory(stagingBufferMemory);
 
     this->CommandBuffers_createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer,
-        vk::MemoryPropertyFlagBits::eDeviceLocal, indexBuffer, indexBufferMemory);
+        vk::MemoryPropertyFlagBits::eDeviceLocal, modelBuffers->indexBuffer, modelBuffers->indexBufferMemory);
 
-    this->CommandBuffers_copyBuffer(stagingBuffer, indexBuffer, bufferSize);
+    this->CommandBuffers_copyBuffer(stagingBuffer, modelBuffers->indexBuffer, bufferSize);
 
     logicalDevice->destroyBuffer(stagingBuffer);
     logicalDevice->freeMemory(stagingBufferMemory);
@@ -1455,14 +1413,17 @@ void VulkanAPI::CommandBuffers_recordCommandBuffer(const vk::Extent2D& swapchain
 
     vk::Rect2D scissor{ {0, 0}, swapchainExtent };
     commandBuffer->setScissor(0, 1, &scissor);
-
-    vk::Buffer vertexBuffers[] = { vertexBuffer };
     vk::DeviceSize offsets[] = { 0 };
-    commandBuffer->bindVertexBuffers(0, vertexBuffers, offsets);
-    commandBuffer->bindIndexBuffer(indexBuffer, 0, vk::IndexType::eUint32);
 
-    commandBuffer->bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0, 1, descriptorSets, 0, nullptr);
-    commandBuffer->drawIndexed(static_cast<uint32_t>(model.indices.size()), 1, 0, 0, 0);
+    for (std::shared_ptr<ModelBuffers>& item : this->modelBuffersMap)
+    {
+        vk::Buffer vertexBuffers[] = { item->vertexBuffer };
+        commandBuffer->bindVertexBuffers(0, vertexBuffers, offsets);
+        commandBuffer->bindIndexBuffer(item->indexBuffer, 0, vk::IndexType::eUint32);
+
+        commandBuffer->bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0, 1, descriptorSets, 0, nullptr);
+        commandBuffer->drawIndexed(static_cast<uint32_t>(item->indicesSize), 1, 0, 0, 0);
+    }
     commandBuffer->endRenderPass();
     commandBuffer->end();
 }
@@ -1548,10 +1509,13 @@ void VulkanAPI::CommandBuffers_release(vk::Device* logicalDevice)
     logicalDevice->destroyImage(textureImage);
     logicalDevice->freeMemory(textureImageMemory);
 
-    logicalDevice->destroyBuffer(indexBuffer);
-    logicalDevice->freeMemory(indexBufferMemory);
-    logicalDevice->destroyBuffer(vertexBuffer);
-    logicalDevice->freeMemory(vertexBufferMemory);
+    for (std::shared_ptr<ModelBuffers>& item : this->modelBuffersMap)
+    {
+        logicalDevice->destroyBuffer(item->indexBuffer);
+        logicalDevice->freeMemory(item->indexBufferMemory);
+        logicalDevice->destroyBuffer(item->vertexBuffer);
+        logicalDevice->freeMemory(item->vertexBufferMemory);
+    }
 
     this->CommandBuffers_releaseDepthImages(logicalDevice);
 

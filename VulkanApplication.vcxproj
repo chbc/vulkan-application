@@ -158,6 +158,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="engine\mediaLoader\MediaLoader.cpp" />
     <ClCompile Include="engine\Platform.cpp" />
     <ClCompile Include="engine\sdl\SDLAPI.cpp" />
     <ClCompile Include="engine\vulkan\DebugMessenger.cpp" />
@@ -169,6 +170,7 @@
   <ItemGroup>
     <ClInclude Include="dependencies\stb_image.h" />
     <ClInclude Include="dependencies\tiny_obj_loader.h" />
+    <ClInclude Include="engine\mediaLoader\MediaLoader.h" />
     <ClInclude Include="engine\Platform.h" />
     <ClInclude Include="engine\sdl\SDLAPI.h" />
     <ClInclude Include="engine\Utils.h" />
