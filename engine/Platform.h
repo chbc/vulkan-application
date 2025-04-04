@@ -11,10 +11,12 @@ private:
 public:
 	~Platform();
 	void init();
-	void loadModel(const char* filePath);
+	size_t loadModel(const char* filePath);
 	void loadTexture(const char* filePath);
 	void updateDescriptorSets();
 	void processInput(bool& stillRunning);
-	void drawFrame();
+	void beginDraw();
+	void drawItem(size_t itemId);
+	void endDraw();
 	void processFrameEnd();
 };

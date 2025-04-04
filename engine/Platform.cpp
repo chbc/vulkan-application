@@ -15,9 +15,9 @@ void Platform::init()
     vulkanApi.init(sdlApi);
 }
 
-void Platform::loadModel(const char* filePath)
+size_t Platform::loadModel(const char* filePath)
 {
-    vulkanApi.loadModel(filePath);
+    return vulkanApi.loadModel(filePath);
 }
 
 void Platform::loadTexture(const char* filePath)
@@ -35,9 +35,19 @@ void Platform::processInput(bool& stillRunning)
     sdlApi.processInput(stillRunning);
 }
 
-void Platform::drawFrame()
+void Platform::beginDraw()
 {
-    vulkanApi.drawFrame();
+    vulkanApi.beginDraw();
+}
+
+void Platform::drawItem(size_t itemId)
+{
+    vulkanApi.drawItem(itemId);
+}
+
+void Platform::endDraw()
+{
+    vulkanApi.endDraw();
 }
 
 void Platform::processFrameEnd()
