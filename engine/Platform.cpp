@@ -25,9 +25,9 @@ void Platform::loadTexture(const char* filePath)
     vulkanApi.loadTexture(filePath);
 }
 
-void Platform::updateDescriptorSets()
+void Platform::updateDescriptorSets(size_t modelId)
 {
-    vulkanApi.updateDescriptorSets();
+    vulkanApi.updateDescriptorSets(modelId);
 }
 
 void Platform::processInput(bool& stillRunning)
@@ -38,6 +38,11 @@ void Platform::processInput(bool& stillRunning)
 void Platform::beginDraw()
 {
     vulkanApi.beginDraw();
+}
+
+void Platform::updateTransform(size_t modelId, const glm::mat4& transform)
+{
+	vulkanApi.updateTransform(modelId, transform);
 }
 
 void Platform::drawItem(size_t itemId)

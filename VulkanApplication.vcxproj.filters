@@ -78,5 +78,8 @@
     <ClInclude Include="engine\mediaLoader\MediaLoader.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="engine\entities\Entity.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

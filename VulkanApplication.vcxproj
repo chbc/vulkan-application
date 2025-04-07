@@ -170,6 +170,7 @@
   <ItemGroup>
     <ClInclude Include="dependencies\stb_image.h" />
     <ClInclude Include="dependencies\tiny_obj_loader.h" />
+    <ClInclude Include="engine\entities\Entity.h" />
     <ClInclude Include="engine\mediaLoader\MediaLoader.h" />
     <ClInclude Include="engine\Platform.h" />
     <ClInclude Include="engine\sdl\SDLAPI.h" />

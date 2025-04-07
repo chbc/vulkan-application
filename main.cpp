@@ -37,19 +37,30 @@ Create and destroy a Vulkan surface on an SDL window.
 #include "engine/Platform.h"
 
 #include <iostream>
+#include <glm/gtc/type_ptr.hpp>
 
 int main()
 {
     Platform platform;
 	std::vector<size_t> modelIds;
+    std::vector<glm::mat4> modelTransforms;
 
     try
     {
         platform.init();
+
         size_t modelId = platform.loadModel("../../media/viking_room.obj");
-        modelIds.emplace_back(modelId);
         platform.loadTexture("../../media/viking_room.png");
-        platform.updateDescriptorSets();
+        platform.updateDescriptorSets(modelId);
+        modelIds.emplace_back(modelId);
+
+        modelId = platform.loadModel("../../media/viking_room.obj");
+        platform.updateDescriptorSets(modelId);
+        modelIds.emplace_back(modelId);
+
+        modelTransforms.emplace_back(glm::translate(glm::mat4{ 1.0f }, glm::vec3{ -0.75f, 0.0f, 0.0f }));
+        modelTransforms.emplace_back(glm::translate(glm::mat4{ 1.0f }, glm::vec3{ 0.75f, 0.0f, 0.0f }));
+
     }
     catch (const std::exception& e)
     {
@@ -63,9 +74,13 @@ int main()
         platform.processInput(stillRunning);
 
         platform.beginDraw();
-        for (size_t item : modelIds)
+        for (int i = 0; i < modelIds.size(); ++i)
         {
-		    platform.drawItem(item);
+			size_t id = modelIds[i];
+
+            glm::mat4& transform = modelTransforms[i];
+			platform.updateTransform(id, transform);
+		    platform.drawItem(id);
         }
 		platform.endDraw();
 
@@ -74,3 +89,5 @@ int main()
 
     return 0;
 }
+
+// ubo.model = glm::rotate(glm::mat4(1.0f), 0.25f * time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));

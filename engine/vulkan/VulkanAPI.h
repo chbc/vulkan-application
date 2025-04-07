@@ -7,6 +7,7 @@
 
 #include <vector>
 #include <memory>
+#include <glm/gtc/type_ptr.hpp>
 
 struct SwapChainSupportDetails;
 struct QueueFamilyIndices;
@@ -26,7 +27,8 @@ private:
 public:
 	void init(SDLAPI& sdlApi);
 	void beginDraw();
-	void drawItem(size_t itemId);
+	void updateTransform(size_t modelId, const glm::mat4& transform);
+	void drawItem(size_t modelId);
 	void endDraw();
 
 private:
@@ -82,7 +84,7 @@ private:
 	// CommandBuffers
 	size_t loadModel(const char* filePath);
 	void loadTexture(const char* filePath);
-	void updateDescriptorSets();
+	void updateDescriptorSets(size_t modelId);
 	void CommandBuffers_init(const vk::SurfaceKHR& surface);
 	void CommandBuffers_createCommandPool(uint32_t queueFamilyIndex);
 	void CommandBuffers_createDepthResources();
@@ -95,13 +97,12 @@ private:
 	void CommandBuffers_createTextureSampler();
 	void CommandBuffers_createVertexBuffer(const Model& model, ModelBuffers* modelBuffers);
 	void CommandBuffers_createIndexBuffer(const Model& model, ModelBuffers* modelBuffers);
-	void CommandBuffers_createUniformBuffers();
+	void CommandBuffers_createUniformBuffers(ModelBuffers* modelBuffers);
 	void CommandBuffers_createCommandBuffers();
 	uint32_t CommandBuffers_getCurrentFrameIndex();
 	void CommandBuffers_copyBuffer(vk::Buffer& srcBuffer, vk::Buffer& dstBuffer, vk::DeviceSize& size);
 	void CommandBuffers_createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties,
 		vk::Buffer& buffer, vk::DeviceMemory& bufferMemory);
-	void CommandBuffers_updateUniformBuffer(const vk::Extent2D& swapchainExtent);
 	vk::CommandBuffer CommandBuffers_beginSingleTimeCommands();
 	void CommandBuffers_endSingleTimeCommands(vk::CommandBuffer& commandBuffer);
 	void CommandBuffers_increaseFrame(int maxFramesInFlight);

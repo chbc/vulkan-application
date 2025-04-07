@@ -74,9 +74,12 @@ struct ModelBuffers
 {
     size_t indicesSize{ 0 };
     vk::Buffer vertexBuffer;
-    vk::DeviceMemory vertexBufferMemory;
     vk::Buffer indexBuffer;
     vk::DeviceMemory indexBufferMemory;
+    vk::DeviceMemory vertexBufferMemory;
+    std::vector<vk::Buffer> uniformBuffers;
+    std::vector<vk::DeviceMemory> uniformBuffersMemory;
+    std::vector<void*> uniformBuffersMapped;
 };
 
 vk::CommandPool commandPool;
@@ -89,10 +92,6 @@ struct UniformBufferObject
     glm::mat4 view;
     glm::mat4 proj;
 };
-
-std::vector<vk::Buffer> uniformBuffers;
-std::vector<vk::DeviceMemory> uniformBuffersMemory;
-std::vector<void*> uniformBuffersMapped;
 
 vk::Image textureImage;
 vk::DeviceMemory textureImageMemory;
@@ -189,11 +188,27 @@ void VulkanAPI::beginDraw()
     commandBuffer.setScissor(0, 1, &scissor);
 }
 
-void VulkanAPI::drawItem(size_t itemId)
+void VulkanAPI::updateTransform(size_t modelId, const glm::mat4& transform)
 {
-    this->CommandBuffers_updateUniformBuffer(swapchainExtent);
+    /*
+    static auto startTime = std::chrono::high_resolution_clock::now();
 
-    std::shared_ptr<ModelBuffers>& item = this->modelBuffersMap[itemId];
+    auto currentTime = std::chrono::high_resolution_clock::now();
+    float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
+    */
+
+    UniformBufferObject ubo;
+    ubo.model = transform;
+    ubo.view = glm::lookAt(glm::vec3(0.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+    ubo.proj = glm::perspective(glm::radians(45.0f), swapchainExtent.width / (float)swapchainExtent.height, 0.1f, 10.0f);
+    ubo.proj[1][1] *= -1.0f;
+
+    memcpy(this->modelBuffersMap[modelId]->uniformBuffersMapped[currentFrame], &ubo, sizeof(ubo));
+}
+
+void VulkanAPI::drawItem(size_t modelId)
+{
+    std::shared_ptr<ModelBuffers>& item = this->modelBuffersMap[modelId];
     vk::DeviceSize offsets[] = { 0 };
     vk::Buffer vertexBuffers[] = { item->vertexBuffer };
 
@@ -1009,7 +1024,7 @@ size_t VulkanAPI::loadModel(const char* filePath)
 
     this->CommandBuffers_createVertexBuffer(model, modelBuffers.get());
     this->CommandBuffers_createIndexBuffer(model, modelBuffers.get());
-    this->CommandBuffers_createUniformBuffers();
+    this->CommandBuffers_createUniformBuffers(modelBuffers.get());
 
     size_t result = this->modelBuffersMap.size();
     this->modelBuffersMap.emplace_back(modelBuffers);
@@ -1048,15 +1063,16 @@ void VulkanAPI::loadTexture(const char* filePath)
     logicalDevice.freeMemory(stagingBufferMemory);
 }
 
-void VulkanAPI::updateDescriptorSets()
+void VulkanAPI::updateDescriptorSets(size_t modelId)
 {
+    ModelBuffers* modelBuffers = this->modelBuffersMap[modelId].get();
     for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
     {
         vk::DescriptorSet& descriptorSet = vkDescriptorSets[i];
         vk::DescriptorBufferInfo bufferInfo;
         vk::DescriptorImageInfo imageInfo;
 
-        bufferInfo = vk::DescriptorBufferInfo(uniformBuffers[i], 0, sizeof(UniformBufferObject));
+        bufferInfo = vk::DescriptorBufferInfo(modelBuffers->uniformBuffers[i], 0, sizeof(UniformBufferObject));
         imageInfo = vk::DescriptorImageInfo(textureSampler, textureImageView, vk::ImageLayout::eShaderReadOnlyOptimal);
 
         std::array<vk::WriteDescriptorSet, 2> descriptorWrites;
@@ -1241,6 +1257,7 @@ void VulkanAPI::CommandBuffers_createVertexBuffer(const Model& model, ModelBuffe
     memcpy(data, model.vertices.data(), (size_t)bufferSize);
     logicalDevice.unmapMemory(stagingBufferMemory);
 
+    
     this->CommandBuffers_createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer,
         vk::MemoryPropertyFlagBits::eDeviceLocal, modelBuffers->vertexBuffer, modelBuffers->vertexBufferMemory);
 
@@ -1271,20 +1288,20 @@ void VulkanAPI::CommandBuffers_createIndexBuffer(const Model& model, ModelBuffer
     logicalDevice.freeMemory(stagingBufferMemory);
 }
 
-void VulkanAPI::CommandBuffers_createUniformBuffers()
+void VulkanAPI::CommandBuffers_createUniformBuffers(ModelBuffers* modelBuffers)
 {
     vk::DeviceSize bufferSize = sizeof(UniformBufferObject);
 
-    uniformBuffers.resize(MAX_FRAMES_IN_FLIGHT);
-    uniformBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT);
-    uniformBuffersMapped.resize(MAX_FRAMES_IN_FLIGHT);
+    modelBuffers->uniformBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+    modelBuffers->uniformBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT);
+    modelBuffers->uniformBuffersMapped.resize(MAX_FRAMES_IN_FLIGHT);
 
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
     {
         this->CommandBuffers_createBuffer(bufferSize, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible |
-            vk::MemoryPropertyFlagBits::eHostCoherent, uniformBuffers[i], uniformBuffersMemory[i]);
+            vk::MemoryPropertyFlagBits::eHostCoherent, modelBuffers->uniformBuffers[i], modelBuffers->uniformBuffersMemory[i]);
 
-        uniformBuffersMapped[i] = logicalDevice.mapMemory(uniformBuffersMemory[i], 0, bufferSize);
+        modelBuffers->uniformBuffersMapped[i] = logicalDevice.mapMemory(modelBuffers->uniformBuffersMemory[i], 0, bufferSize);
     }
 }
 
@@ -1345,22 +1362,6 @@ void VulkanAPI::CommandBuffers_createBuffer(vk::DeviceSize size, vk::BufferUsage
     logicalDevice.bindBufferMemory(buffer, bufferMemory, 0);
 }
 
-void VulkanAPI::CommandBuffers_updateUniformBuffer(const vk::Extent2D& swapchainExtent)
-{
-    static auto startTime = std::chrono::high_resolution_clock::now();
-
-    auto currentTime = std::chrono::high_resolution_clock::now();
-    float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
-
-    UniformBufferObject ubo;
-    ubo.model = glm::rotate(glm::mat4(1.0f), 0.25f * time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-    ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-    ubo.proj = glm::perspective(glm::radians(45.0f), swapchainExtent.width / (float)swapchainExtent.height, 0.1f, 10.0f);
-    ubo.proj[1][1] *= -1.0f;
-
-    memcpy(uniformBuffersMapped[currentFrame], &ubo, sizeof(ubo));
-}
-
 vk::CommandBuffer VulkanAPI::CommandBuffers_beginSingleTimeCommands()
 {
     vk::CommandBufferAllocateInfo allocInfo = vk::CommandBufferAllocateInfo()
@@ -1399,16 +1400,19 @@ void VulkanAPI::CommandBuffers_increaseFrame(int maxFramesInFlight)
 
 void VulkanAPI::CommandBuffers_releaseUniformBuffers()
 {
-    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+    for (auto& modelBuffer : this->modelBuffersMap)
     {
-        if (i < uniformBuffers.size())
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
         {
-            logicalDevice.destroyBuffer(uniformBuffers[i]);
-        }
+            if (i < modelBuffer->uniformBuffers.size())
+            {
+                logicalDevice.destroyBuffer(modelBuffer->uniformBuffers[i]);
+            }
 
-        if (i < uniformBuffersMemory.size())
-        {
-            logicalDevice.freeMemory(uniformBuffersMemory[i]);
+            if (i < modelBuffer->uniformBuffersMemory.size())
+            {
+                logicalDevice.freeMemory(modelBuffer->uniformBuffersMemory[i]);
+            }
         }
     }
 }
