@@ -7,7 +7,6 @@
 #include <vulkan/vulkan.hpp>
 
 #include <iostream>
-#include <array>
 #include <chrono>
 #include <optional>
 #include <set>
@@ -116,7 +115,8 @@ void VulkanAPI::init(SDLAPI& sdlApi)
     this->createInstance();
     this->debugMessenger.init(instance, nullptr);
     this->createSurface();
-    this->Devices_init(instance, surface, this->validationLayers);
+    this->Devices_pickPhysicalDevice(instance, surface);
+    this->Devices_createLogicalDevice(validationLayers);
     this->Swapchain_init(surface, this->sdlApi->window);
     this->Swapchain_createImageViews();
     this->RenderPass_init();
@@ -304,17 +304,9 @@ void VulkanAPI::createInstance()
         throw std::runtime_error("Validation layers requested, bot not available!");
     }
 
-    // vk::ApplicationInfo allows the programmer to specifiy some basic information about the
-    // program, which can be useful for layers and tools to provide more debug information.
-    vk::ApplicationInfo appInfo = vk::ApplicationInfo()
-        .setPApplicationName("Vulkan C++ Windowed Program Template")
-        .setApplicationVersion(1)
-        .setPEngineName("LunarG SDK")
-        .setEngineVersion(1)
-        .setApiVersion(VK_API_VERSION_1_0);
+    vk::ApplicationInfo appInfo("Vulkan C++ Windowed Program Template", VK_MAKE_VERSION(1, 0, 0),
+        "LunarG SDK", VK_MAKE_VERSION(1, 0, 0), VK_API_VERSION_1_0);
 
-    // vk::InstanceCreateInfo is where the programmer specifies the layers and/or extensions that
-    // are needed.
     std::vector<const char*> extensions = getRequiredExtensions();
     vk::InstanceCreateInfo createInfo = vk::InstanceCreateInfo()
         .setFlags(vk::InstanceCreateFlags())
@@ -488,12 +480,6 @@ vk::ShaderModule VulkanAPI::createShaderModule(const std::vector<char>& code)
 }
 
 // Devices
-void VulkanAPI::Devices_init(const vk::Instance& instance, const vk::SurfaceKHR& surface, const ValidationLayers& validationLayers)
-{
-    this->Devices_pickPhysicalDevice(instance, surface);
-    this->Devices_createLogicalDevice(validationLayers);
-}
-
 void VulkanAPI::Devices_pickPhysicalDevice(const vk::Instance& instance, const vk::SurfaceKHR& surface)
 {
     std::vector<vk::PhysicalDevice> devices = instance.enumeratePhysicalDevices();
@@ -1020,7 +1006,7 @@ size_t VulkanAPI::loadModel(const char* filePath)
     Model model;
     MediaLoader::loadModel(filePath, model);
     std::shared_ptr<ModelBuffers> modelBuffers{ new ModelBuffers };
-    modelBuffers->indicesSize = model.indices.size();
+    modelBuffers->indicesSize = static_cast<uint32_t>(model.indices.size());
 
     this->CommandBuffers_createVertexBuffer(model, modelBuffers.get());
     this->CommandBuffers_createIndexBuffer(model, modelBuffers.get());

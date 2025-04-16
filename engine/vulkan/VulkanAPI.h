@@ -40,7 +40,6 @@ private:
 	vk::ShaderModule createShaderModule(const std::vector<char>& code);
 
 	// Devices
-	void Devices_init(const vk::Instance& instance, const vk::SurfaceKHR& surface, const ValidationLayers& validationLayers);
 	void Devices_pickPhysicalDevice(const vk::Instance& instance, const vk::SurfaceKHR& surface);
 	void Devices_createLogicalDevice(const ValidationLayers& validationLayers);
 	uint32_t Devices_findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties);
