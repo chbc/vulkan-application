@@ -72,7 +72,7 @@ vk::DescriptorPool descriptorPool;
 // CommandBuffers
 struct ModelBuffers
 {
-    size_t indicesSize{ 0 };
+    uint32_t indicesSize{ 0 };
     vk::Buffer vertexBuffer;
     vk::Buffer indexBuffer;
     vk::DeviceMemory indexBufferMemory;
