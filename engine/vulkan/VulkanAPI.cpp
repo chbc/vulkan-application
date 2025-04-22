@@ -37,7 +37,7 @@ QueueFamilyIndices familyIndices;
 vk::Queue graphicsQueue;
 vk::Queue presentQueue;
 
-const std::vector<const char*> deviceExtensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
+const std::vector<const char*> deviceExtensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME };
 //
 
 // Swapchain
@@ -56,10 +56,6 @@ vk::Extent2D swapchainExtent;
 std::vector<vk::ImageView> swapchainImageViews;
 std::vector<vk::Framebuffer> swapchainFramebuffers;
 vk::ResultValue<uint32_t> currentImageIndex{ vk::Result::eSuccess, 0 };
-//
-
-// RenderPass
-vk::RenderPass renderPassRef;
 //
 
 // DescriptorSets
@@ -125,7 +121,6 @@ void VulkanAPI::init(SDLAPI& sdlApi)
     this->createGraphicsPipeline();
 
     this->CommandBuffers_init(surface);
-    this->Swapchain_createFramebuffers();
 
     this->DescriptorSets_initPool();
     this->DescriptorSets_initDescriptorSet();
@@ -145,7 +140,6 @@ void VulkanAPI::beginDraw()
     {
         this->Swapchain_recreate(surface, this->sdlApi->window);
         this->CommandBuffers_recreateDepthResources();
-        this->Swapchain_createFramebuffers();
         return;
     }
     else if ((currentImageIndex.result != vk::Result::eSuccess) && (currentImageIndex.result != vk::Result::eSuboptimalKHR))
@@ -165,27 +159,36 @@ void VulkanAPI::beginDraw()
 
     commandBuffer.begin(beginInfo);
 
-    std::array<vk::ClearValue, 2> clearValues;
-    clearValues[0].color = vk::ClearColorValue{ 0.0f, 0.0f, 0.0f, 1.0f };
-    clearValues[1].depthStencil = vk::ClearDepthStencilValue{ 1.0f, 0 };
+	const vk::ImageMemoryBarrier barrier = vk::ImageMemoryBarrier()
+		.setDstAccessMask(vk::AccessFlagBits::eColorAttachmentWrite)
+		.setOldLayout(vk::ImageLayout::eUndefined)
+		.setNewLayout(vk::ImageLayout::eColorAttachmentOptimal)
+		.setImage(swapchainImages[currentImageIndex.value])
+		.setSubresourceRange(vk::ImageSubresourceRange()
+			.setAspectMask(vk::ImageAspectFlagBits::eColor)
+			.setBaseMipLevel(0)
+			.setLevelCount(1)
+			.setBaseArrayLayer(0)
+			.setLayerCount(1)
+		);
 
-    vk::RenderPassBeginInfo& renderPassInfo = this->RenderPass_createInfo(swapchainExtent, currentImageIndex.value);
-    renderPassInfo.setClearValues(clearValues);
+	commandBuffer.pipelineBarrier(vk::PipelineStageFlagBits::eTopOfPipe,
+		vk::PipelineStageFlagBits::eColorAttachmentOutput, {}, {}, {}, barrier);
 
-    commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
-    commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
+	const vk::RenderingAttachmentInfoKHR colorAttachment = vk::RenderingAttachmentInfoKHR()
+		.setImageView(swapchainImageViews[currentImageIndex.value])
+		.setImageLayout(vk::ImageLayout::eColorAttachmentOptimal)
+		.setLoadOp(vk::AttachmentLoadOp::eClear)
+		.setStoreOp(vk::AttachmentStoreOp::eStore)
+		.setClearValue(vk::ClearValue().setColor(vk::ClearColorValue(std::array<float, 4>{ 0.0f, 0.0f, 0.0f, 1.0f })));
 
-    vk::Viewport viewport = vk::Viewport()
-        .setX(0.0f).setY(0.0f)
-        .setWidth(static_cast<float>(swapchainExtent.width))
-        .setHeight(static_cast<float>(swapchainExtent.height))
-        .setMinDepth(0.0f)
-        .setMaxDepth(1.0f);
+    const vk::RenderingInfoKHR renderingInfo = vk::RenderingInfoKHR()
+        .setRenderArea(vk::Rect2D({ 0, 0 }, swapchainExtent))
+        .setLayerCount(1)
+        .setColorAttachmentCount(1)
+        .setPColorAttachments(&colorAttachment);
 
-    commandBuffer.setViewport(0, 1, &viewport);
-
-    vk::Rect2D scissor{ {0, 0}, swapchainExtent };
-    commandBuffer.setScissor(0, 1, &scissor);
+	commandBuffer.beginRendering(renderingInfo);
 }
 
 void VulkanAPI::updateTransform(size_t modelId, const glm::mat4& transform)
@@ -216,6 +219,17 @@ void VulkanAPI::drawItem(size_t modelId)
     commandBuffer.bindVertexBuffers(0, vertexBuffers, offsets);
     commandBuffer.bindIndexBuffer(item->indexBuffer, 0, vk::IndexType::eUint32);
 
+    commandBuffer.setViewport
+    (
+        0, vk::Viewport
+        (
+            0.0f, 0.0f, static_cast<float>(swapchainExtent.width), static_cast<float>(swapchainExtent.height),
+            0.0f, 1.0f
+        )
+    );
+    commandBuffer.setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), swapchainExtent));
+	commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
+
     const vk::DescriptorSet* descriptorSets = &vkDescriptorSets[currentFrame];
     commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0, 1, descriptorSets, 0, nullptr);
     commandBuffer.drawIndexed(static_cast<uint32_t>(item->indicesSize), 1, 0, 0, 0);
@@ -224,7 +238,24 @@ void VulkanAPI::drawItem(size_t modelId)
 void VulkanAPI::endDraw()
 {
     const vk::CommandBuffer& commandBuffer = commandBuffers[currentFrame];
-    commandBuffer.endRenderPass();
+    commandBuffer.endRendering();
+
+	const vk::ImageMemoryBarrier& barrier = vk::ImageMemoryBarrier()
+		.setSrcAccessMask(vk::AccessFlagBits::eColorAttachmentWrite)
+		.setOldLayout(vk::ImageLayout::eColorAttachmentOptimal)
+		.setNewLayout(vk::ImageLayout::ePresentSrcKHR)
+		.setImage(swapchainImages[currentImageIndex.value])
+		.setSubresourceRange(vk::ImageSubresourceRange()
+		    .setAspectMask(vk::ImageAspectFlagBits::eColor)
+		    .setBaseMipLevel(0)
+		    .setLevelCount(1)
+		    .setBaseArrayLayer(0)
+		    .setLayerCount(1)
+        );
+
+	commandBuffer.pipelineBarrier(vk::PipelineStageFlagBits::eColorAttachmentOutput,
+		vk::PipelineStageFlagBits::eBottomOfPipe, {}, {}, {}, barrier);
+
     commandBuffer.end();
 
     const vk::Semaphore& currentImageSemaphore = imageAvailableSemaphores[currentFrame];
@@ -258,12 +289,11 @@ void VulkanAPI::endDraw()
 
     vk::Result result = presentQueue.presentKHR(&presentInfo);
 
-    if ((result == vk::Result::eErrorOutOfDateKHR) || (result != vk::Result::eSuboptimalKHR) || framebufferResized)
+    if ((result == vk::Result::eErrorOutOfDateKHR) || (result == vk::Result::eSuboptimalKHR) || framebufferResized)
     {
         framebufferResized = false;
         this->Swapchain_recreate(surface, this->sdlApi->window);
         this->CommandBuffers_recreateDepthResources();
-        this->Swapchain_createFramebuffers();
     }
     else if (result != vk::Result::eSuccess)
     {
@@ -305,7 +335,7 @@ void VulkanAPI::createInstance()
     }
 
     vk::ApplicationInfo appInfo("Vulkan C++ Windowed Program Template", VK_MAKE_VERSION(1, 0, 0),
-        "LunarG SDK", VK_MAKE_VERSION(1, 0, 0), VK_API_VERSION_1_0);
+        "LunarG SDK", VK_MAKE_VERSION(1, 3, 0), VK_API_VERSION_1_3);
 
     std::vector<const char*> extensions = getRequiredExtensions();
     vk::InstanceCreateInfo createInfo = vk::InstanceCreateInfo()
@@ -441,6 +471,10 @@ void VulkanAPI::createGraphicsPipeline()
         .setMaxDepthBounds(1.0f)
         .setStencilTestEnable(vk::False);
 
+    const vk::PipelineRenderingCreateInfoKHR pipelineRenderingInfo = vk::PipelineRenderingCreateInfoKHR()
+        .setColorAttachmentCount(1)
+        .setPColorAttachmentFormats(&swapchainImageFormat);
+
     vk::GraphicsPipelineCreateInfo pipelineInfo = vk::GraphicsPipelineCreateInfo()
         .setStageCount(2)
         .setPStages(shaderStages)
@@ -453,10 +487,11 @@ void VulkanAPI::createGraphicsPipeline()
         .setPColorBlendState(&colorBlending)
         .setPDynamicState(&dynamicState)
         .setLayout(pipelineLayout)
-        .setRenderPass(renderPassRef)
+        .setRenderPass(nullptr)
         .setSubpass(0)
         .setBasePipelineHandle(nullptr)
-        .setBasePipelineIndex(-1);
+        .setBasePipelineIndex(-1)
+        .setPNext(&pipelineRenderingInfo);
 
     vk::Result result;
     std::tie(result, graphicsPipeline) = logicalDevice.createGraphicsPipeline(nullptr, pipelineInfo);
@@ -523,12 +558,17 @@ void VulkanAPI::Devices_createLogicalDevice(const ValidationLayers& validationLa
     vk::PhysicalDeviceFeatures deviceFeatures = vk::PhysicalDeviceFeatures()
         .setSamplerAnisotropy(vk::True);
 
+	constexpr vk::PhysicalDeviceDynamicRenderingFeaturesKHR dynamicRenderingFeature = vk::PhysicalDeviceDynamicRenderingFeaturesKHR()
+		.setDynamicRendering(vk::True);
+
     vk::DeviceCreateInfo createInfo = vk::DeviceCreateInfo()
         .setQueueCreateInfoCount(static_cast<uint32_t>(queueCreateInfos.size()))
         .setPQueueCreateInfos(queueCreateInfos.data())
         .setPEnabledFeatures(&deviceFeatures)
         .setPEnabledExtensionNames(deviceExtensions)
-        .setPEnabledLayerNames(validationLayers.getData());
+        .setPEnabledLayerNames(validationLayers.getData())
+        .setEnabledExtensionCount(static_cast<uint32_t>(deviceExtensions.size()))
+        .setPNext(&dynamicRenderingFeature);
 
     logicalDevice = physicalDevice.createDevice(createInfo);
 
@@ -748,25 +788,6 @@ void VulkanAPI::Swapchain_createImageViews()
     }
 }
 
-void VulkanAPI::Swapchain_createFramebuffers()
-{
-    swapchainFramebuffers.resize(swapchainImageViews.size());
-    for (size_t i = 0; i < swapchainImageViews.size(); i++)
-    {
-        std::array<vk::ImageView, 2> attachments = { swapchainImageViews[i], depthImageView };
-
-        vk::FramebufferCreateInfo framebufferInfo = vk::FramebufferCreateInfo()
-            .setRenderPass(renderPassRef)
-            .setAttachmentCount(static_cast<uint32_t>(attachments.size()))
-            .setAttachments(attachments)
-            .setWidth(swapchainExtent.width)
-            .setHeight(swapchainExtent.height)
-            .setLayers(1);
-
-        swapchainFramebuffers[i] = logicalDevice.createFramebuffer(framebufferInfo);
-    }
-}
-
 void VulkanAPI::Swapchain_getFramebuffer(uint32_t index, vk::Framebuffer& result)
 {
     result = swapchainFramebuffers[index];
@@ -913,37 +934,7 @@ void VulkanAPI::RenderPass_init()
         .setDstAccessMask(vk::AccessFlagBits::eColorAttachmentWrite | vk::AccessFlagBits::eDepthStencilAttachmentWrite);
 
     std::array<vk::AttachmentDescription, 2> attachments = { colorAttachment, depthAttachment };
-
-    vk::RenderPassCreateInfo renderPassInfo = vk::RenderPassCreateInfo()
-        .setAttachmentCount(static_cast<uint32_t>(attachments.size()))
-        .setAttachments(attachments)
-        .setSubpassCount(1)
-        .setPSubpasses(&subpass)
-        .setDependencyCount(1)
-        .setPDependencies(&dependency);
-
-    if (logicalDevice.createRenderPass(&renderPassInfo, nullptr, &renderPassRef) != vk::Result::eSuccess)
-    {
-        throw std::runtime_error("Failed to create render pass!");
-    }
 }
-
-vk::RenderPassBeginInfo VulkanAPI::RenderPass_createInfo(const vk::Extent2D& extent, uint32_t imageIndex)
-{
-    vk::Framebuffer framebuffer;
-    Swapchain_getFramebuffer(imageIndex, framebuffer);
-
-    vk::ClearValue clearColor{ {0.0f, 0.0f, 0.0f, 1.0f} };
-    vk::RenderPassBeginInfo result = vk::RenderPassBeginInfo()
-        .setRenderPass(renderPassRef)
-        .setFramebuffer(framebuffer)
-        .setRenderArea(vk::Rect2D{ {0, 0}, extent })
-        .setClearValueCount(1)
-        .setPClearValues(&clearColor);
-
-    return result;
-}
-//
 
 // DescriptorSets
 void VulkanAPI::DescriptorSets_initLayout()
@@ -1486,7 +1477,6 @@ void VulkanAPI::preRelease()
 
         logicalDevice.destroyPipeline(graphicsPipeline);
         logicalDevice.destroyPipelineLayout(pipelineLayout);
-        logicalDevice.destroyRenderPass(renderPassRef);
 
         this->CommandBuffers_releaseUniformBuffers();
         this->DescriptorSets_release();

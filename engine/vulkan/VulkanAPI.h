@@ -56,7 +56,6 @@ private:
 	// Swapchain
 	void Swapchain_init(const vk::SurfaceKHR& surface, SDL_Window* window);
 	void Swapchain_createImageViews();
-	void Swapchain_createFramebuffers();
 	void Swapchain_getFramebuffer(uint32_t index, vk::Framebuffer& result);
 	static SwapChainSupportDetails Swapchain_querySwapChainSupport(const vk::SurfaceKHR& surface, const vk::PhysicalDevice* device);
 	static bool Swapchain_isSwapChainAdequate(const vk::SurfaceKHR& surface, const vk::PhysicalDevice* device);
@@ -69,7 +68,6 @@ private:
 
 	// RenderPass
 	void RenderPass_init();
-	vk::RenderPassBeginInfo RenderPass_createInfo(const vk::Extent2D& extent, uint32_t imageIndex);
 	//
 
 	// DescriptorSets
